@@ -118,7 +118,18 @@ proc ::simmerblau::save_palette {name} {
     package require json::write
     set path [::simmerblau::get_storage_path]
     set filename [file join $path "${name}.json"]
-    set ramp [::simmerblau::logic::generate_ramp -total $::simmerblau::total -hStart $::simmerblau::hStart -hCycles $::simmerblau::hCycles -hStartCenter $::simmerblau::hStartCenter -sRange [list $::simmerblau::sMin $::simmerblau::sMax] -lRange [list $::simmerblau::lMin $::simmerblau::lMax] -curveMethod $::simmerblau::curveMethod -curveAccent $::simmerblau::curveAccent -useHarvey $::simmerblau::useHarvey -harmony $::simmerblau::harmony]
+    set ramp [::simmerblau::logic::generate_ramp \
+        -total $::simmerblau::total \
+        -hStart $::simmerblau::hStart \
+        -hCycles $::simmerblau::hCycles \
+        -hStartCenter $::simmerblau::hStartCenter \
+        -sRange [list $::simmerblau::sMin $::simmerblau::sMax] \
+        -lRange [list $::simmerblau::lMin $::simmerblau::lMax] \
+        -curveMethod $::simmerblau::curveMethod \
+        -curveAccent $::simmerblau::curveAccent \
+        -useHarvey $::simmerblau::useHarvey \
+        -harmony $::simmerblau::harmony
+    ]
     set hex_items {}
     foreach color $ramp {
         if {$::simmerblau::colorSpace == "OKLCH"} { set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]] } else { set rgb [::simmerblau::logic::hsl2rgb {*}$color] }
@@ -174,8 +185,11 @@ proc ::simmerblau::step_value {var res dir from to} {
 # This is the most cursed mess you will ever see. I am so sorry.
 proc ::simmerblau::simmerblau_gui {} {
     set font "Helvetica"
+    set font_explanation "Times 10 italic"
+    set fg_subtle gray50
     set pad 5
-    set wraplength 400
+    set framepad 10
+    set wraplength 450
 
     variable w
 
@@ -187,20 +201,22 @@ proc ::simmerblau::simmerblau_gui {} {
     set w [toplevel ".simmerblau"]
     wm title $w $::simmerblau::plugin_title
     wm resizable $w 1 1
-    wm minsize $w 600 950
+    wm minsize $w 580 920
 
     set cv [canvas $w.cv -width 80 -height 700 -bg black -highlightthickness 0]
     grid $cv -row 0 -column 0 -sticky nsew -padx $pad -pady $pad
     bind $cv <Configure> { ::simmerblau::update_preview }
 
-    set f [frame $w.f -padx 10 -pady 10]
+    set f [frame $w.f -padx $framepad -pady $framepad]
     grid $f -row 0 -column 1 -sticky nsew
     grid columnconfigure $w 1 -weight 1
     grid rowconfigure $w 0 -weight 1
 
-    set pm [labelframe $f.mode -text "Designer settings" -padx 10 -pady 10]
+    set pm [labelframe $f.mode -text "Color space" -padx $framepad -pady $framepad]
     pack $pm -fill x -pady $pad
-    label $pm.desc -text "OKLCH tries to provide uniform perceived brightness." -font {$font 8 italic} -wraplength $wraplength -justify left
+    label $pm.desc -text "OKLCH tries to provide uniform perceived brightness. \
+        The Harvey fix smooths out clumped blue/green hues to give a more natural spectrum." \
+        -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $pm.desc -anchor w -pady "0 $pad"
 
     set frm [frame $pm.frm]
@@ -211,12 +227,10 @@ proc ::simmerblau::simmerblau_gui {} {
     pack $frm.l1 $frm.r1 $frm.r2 $frm.c1 -side left -padx $pad
     pack $frm -fill x
 
-    label $pm.hfix -text "Harvey fix smooths out green/blue clumping for a more natural spectrum." -font {$font 8 italic} -wraplength $wraplength -justify left
-    pack $pm.hfix -anchor w -pady "$pad 0"
-
-    set phue [labelframe $f.hue -text "Color variety & harmony" -padx 10 -pady 10]
+    set phue [labelframe $f.hue -text "Hue" -padx $framepad -pady $framepad]
     pack $phue -fill x -pady $pad
-    label $phue.desc -text "Defines the path through the color wheel. Use 'Variety' to sweep through more hues." -font {$font 8 italic} -wraplength $wraplength -justify left
+    label $phue.desc -text "Defines the path through the color wheel." \
+        -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $phue.desc -anchor w -pady "0 $pad"
 
     set frh [frame $phue.frh]
@@ -225,24 +239,26 @@ proc ::simmerblau::simmerblau_gui {} {
     eval [list tk_optionMenu $frh.m ::simmerblau::harmony] $h_opts
     pack $frh.l $frh.m -side left
     pack $frh -fill x -pady $pad
-    ::simmerblau::create_control $phue "Base hue" hStart 0 360 1
-    ::simmerblau::create_control $phue "Variety" hCycles -2 2
-    ::simmerblau::create_control $phue "Focal point" hStartCenter 0 1
+    ::simmerblau::create_control $phue "Start" hStart 0 360 1
+    ::simmerblau::create_control $phue "Cycles" hCycles -2 2
+    ::simmerblau::create_control $phue "Center" hStartCenter 0 1
     foreach child [winfo children $phue] { if {$child != "$frh" && $child != "$phue.desc"} { pack $child -fill x -expand 1 } }
 
-    set psl [labelframe $f.sl -text "Vibrancy & brightness" -padx 10 -pady 10]
+    set psl [labelframe $f.sl -text "Vibrancy & brightness" -padx $framepad -pady $framepad]
     pack $psl -fill x -pady $pad
-    label $psl.desc -text "Controls intensity from muted neutrals to vivid highlights." -font {$font 8 italic} -wraplength $wraplength -justify left
+    label $psl.desc -text "Controls color intensity and brightness." \
+        -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $psl.desc -anchor w -pady "0 $pad"
-    ::simmerblau::create_control $psl "Vibrancy min" sMin 0 1
-    ::simmerblau::create_control $psl "Vibrancy max" sMax 0 1
-    ::simmerblau::create_control $psl "Brightness min" lMin 0 1
-    ::simmerblau::create_control $psl "Brightness max" lMax 0 1
+    ::simmerblau::create_control $psl "Saturation min" sMin 0 1
+    ::simmerblau::create_control $psl "Saturation max" sMax 0 1
+    ::simmerblau::create_control $psl "Lightness min" lMin 0 1
+    ::simmerblau::create_control $psl "Lightness max" lMax 0 1
     foreach child [winfo children $psl] { if {$child != "$psl.desc"} { pack $child -fill x -expand 1 } }
 
-    set pc [labelframe $f.curve -text "Transition flow" -padx 10 -pady 10]
+    set pc [labelframe $f.curve -text "Flow" -padx $framepad -pady $framepad]
     pack $pc -fill x -pady $pad
-    label $pc.desc -text "Determines how quickly colors 'accelerate' through the ramp." -font {$font 8 italic} -wraplength $wraplength -justify left
+    label $pc.desc -text "Control the accelaration through the color ramp." \
+        -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $pc.desc -anchor w -pady "0 $pad"
 
     set frc [frame $pc.frc]
@@ -257,8 +273,12 @@ proc ::simmerblau::simmerblau_gui {} {
     ::simmerblau::create_control $pc "Flow intensity" curveAccent 0 5
     foreach child [winfo children $pc] { if {$child != "$frc" && $child != "$pc.desc"} { pack $child -fill x -expand 1 } }
 
-    set pl [labelframe $f.lib -text "Palette library" -padx 10 -pady 10]
+    set pl [labelframe $f.lib -text "Palette library" -padx $framepad -pady $framepad]
     pack $pl -fill x -pady $pad
+    label $pl.desc -text "If you have a .simmerblau directory in your project, palettes will be loaded from there. \
+        Globally accessible palettes are stored in ~/.config/simmerblau." \
+        -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
+    pack $pl.desc -anchor w -pady "0 $pad"
     listbox $pl.lb -height 5 -exportselection 0
     pack $pl.lb -fill x -pady $pad
     bind $pl.lb <<ListboxSelect>> { if {[%W curselection] != ""} { ::simmerblau::load_palette [%W get [%W curselection]] } }
@@ -274,19 +294,18 @@ proc ::simmerblau::simmerblau_gui {} {
     pack $frl -fill x
 
 
-    set pa [labelframe $f.apply -text "Target & execution" -padx 10 -pady 10]
+    set pa [labelframe $f.apply -text "Apply to target" -padx $framepad -pady $framepad]
     pack $pa -fill x -pady $pad
     ::simmerblau::create_control $pa "Steps" total 1 128 1
 
     set frt [frame $pa.frt]
-    radiobutton $frt.r1 -text "Palette (0-32)" -value "0-32" -variable ::simmerblau::targetRange
+    radiobutton $frt.r1 -text "Color IDs (0-32)" -value "0-32" -variable ::simmerblau::targetRange
     radiobutton $frt.r2 -text "Color scale" -value "Scale" -variable ::simmerblau::targetRange
-    pack $frt.r1 $frt.r2 -side left -expand 1
+    checkbutton $frt.live -text "Live preview" -variable ::simmerblau::livePreview
+    pack $frt.r1 $frt.r2 $frt.live -side left -expand 1
     pack $frt -fill x -pady $pad
-    button $pa.btn -text "Apply to VMD" -font {$font 10 bold} -command ::simmerblau::apply_ramp
-    checkbutton $pa.live -text "Live preview" -variable ::simmerblau::livePreview
+    button $pa.btn -text "Apply to VMD" -font "$font 10 bold" -command ::simmerblau::apply_ramp
     pack $pa.btn -fill x -pady $pad
-    pack $pa.live -pady 2
 
     set frh [frame $pa.frh]
     button $frh.undo -text "Undo" -command ::simmerblau::trigger_undo
@@ -297,7 +316,7 @@ proc ::simmerblau::simmerblau_gui {} {
 
     # Byline at the bottom.
     label $f.byline -text "By Marieke Westendorp & Aster Kovács, based on Rampensau by David Aerne (meodai)." \
-        -font {$font 7 italic} -fg gray50 -wraplength $wraplength -justify center
+        -font "$font 7 italic" -fg $fg_subtle -wraplength $wraplength -justify center
     pack $f.byline -side bottom -fill x -pady {10 0}
 
     ::simmerblau::refresh_library
@@ -354,7 +373,20 @@ proc ::simmerblau::update_preview {args} {
     variable w; if {![winfo exists $w]} return
     set canvas $w.cv
     $canvas delete all
-    if {[catch { set ramp [::simmerblau::logic::generate_ramp -total $::simmerblau::total -hStart $::simmerblau::hStart -hCycles $::simmerblau::hCycles -hStartCenter $::simmerblau::hStartCenter -sRange [list $::simmerblau::sMin $::simmerblau::sMax] -lRange [list $::simmerblau::lMin $::simmerblau::lMax] -curveMethod $::simmerblau::curveMethod -curveAccent $::simmerblau::curveAccent -useHarvey $::simmerblau::useHarvey -harmony $::simmerblau::harmony] }]} { return }
+    if {[catch {
+        set ramp [::simmerblau::logic::generate_ramp \
+            -total $::simmerblau::total \
+            -hStart $::simmerblau::hStart \
+            -hCycles $::simmerblau::hCycles \
+            -hStartCenter $::simmerblau::hStartCenter \
+            -sRange [list $::simmerblau::sMin $::simmerblau::sMax] \
+            -lRange [list $::simmerblau::lMin $::simmerblau::lMax] \
+            -curveMethod $::simmerblau::curveMethod \
+            -curveAccent $::simmerblau::curveAccent \
+            -useHarvey $::simmerblau::useHarvey \
+            -harmony $::simmerblau::harmony
+        ]
+    }]} { return }
     set height [winfo height $canvas]
     if {$height <= 1} { set height 700 }
     set width [winfo width $canvas]
@@ -372,7 +404,18 @@ proc ::simmerblau::update_preview {args} {
 proc ::simmerblau::apply_ramp {} {
     variable targetRange
     variable total
-    set ramp [::simmerblau::logic::generate_ramp -total $::simmerblau::total -hStart $::simmerblau::hStart -hCycles $::simmerblau::hCycles -hStartCenter $::simmerblau::hStartCenter -sRange [list $::simmerblau::sMin $::simmerblau::sMax] -lRange [list $::simmerblau::lMin $::simmerblau::lMax] -curveMethod $::simmerblau::curveMethod -curveAccent $::simmerblau::curveAccent -useHarvey $::simmerblau::useHarvey -harmony $::simmerblau::harmony]
+    set ramp [::simmerblau::logic::generate_ramp \
+        -total $::simmerblau::total \
+        -hStart $::simmerblau::hStart \
+        -hCycles $::simmerblau::hCycles \
+        -hStartCenter $::simmerblau::hStartCenter \
+        -sRange [list $::simmerblau::sMin $::simmerblau::sMax] \
+        -lRange [list $::simmerblau::lMin $::simmerblau::lMax] \
+        -curveMethod $::simmerblau::curveMethod \
+        -curveAccent $::simmerblau::curveAccent \
+        -useHarvey $::simmerblau::useHarvey \
+        -harmony $::simmerblau::harmony
+    ]
     if {$targetRange == "0-32"} {
         set i 0
         foreach color $ramp {
