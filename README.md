@@ -1,5 +1,7 @@
 # _simmerblau_&mdash;parameterized color palettes for VMD
 
+![Simmerblau in use.](simmerblau.jpg)
+
 _Simmerblau_ lets you generate pleasing color ramps in [VMD][vmd]. It is inspired by and based on
 the fantastic [RampenSau][rampensau]. To learn about the technical details behind the color
 generation, please look at that project. _Simmerblau_ is simply a Tcl port of that color generation
