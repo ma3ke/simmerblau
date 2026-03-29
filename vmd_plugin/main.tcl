@@ -7,7 +7,6 @@
 
 package provide simmerblau 1.0
 
-# Import the logic
 set dir [file dirname [info script]]
 source [file join $dir rampensau.tcl]
 
@@ -32,6 +31,8 @@ namespace eval ::simmerblau:: {
     variable undoStack {}
     variable redoStack {}
     variable snapshotAfterID ""
+    # Dictionary of the index to {r g b}.
+    variable lockedColors {}
     set plugin_title "Simmerblau Colors"
     set label_width 14
 }
@@ -201,11 +202,12 @@ proc ::simmerblau::simmerblau_gui {} {
     set w [toplevel ".simmerblau"]
     wm title $w $::simmerblau::plugin_title
     wm resizable $w 1 1
-    wm minsize $w 580 920
+    wm minsize $w 600 950
 
-    set cv [canvas $w.cv -width 80 -height 700 -bg black -highlightthickness 0]
+    set cv [canvas $w.cv -width 100 -height 700 -bg black -highlightthickness 0]
     grid $cv -row 0 -column 0 -sticky nsew -padx $pad -pady $pad
     bind $cv <Configure> { ::simmerblau::update_preview }
+    bind $cv <Button-1> { ::simmerblau::on_canvas_click %x %y }
 
     set f [frame $w.f -padx $framepad -pady $framepad]
     grid $f -row 0 -column 1 -sticky nsew
@@ -369,13 +371,28 @@ proc ::simmerblau::trace_update {args} {
     }
 }
 
-proc ::simmerblau::update_preview {args} {
-    variable w; if {![winfo exists $w]} return
+proc ::simmerblau::on_canvas_click {x y} {
+    variable w
+    variable lockedColors
+    variable total
+
     set canvas $w.cv
-    $canvas delete all
-    if {[catch {
+    set width [winfo width $canvas]
+    # Only palette side is lockable.
+    if {$x > ($width / 2.0)} return
+
+    set height [winfo height $canvas]
+    # We always show 33 slots for the palette side.
+    set num_boxes 33
+    set step [expr {double($height) / $num_boxes}]
+    set idx [expr {int(floor($y / $step))}]
+
+    if {[dict exists $lockedColors $idx]} {
+        dict unset lockedColors $idx
+    } else {
+        # Lock current projected color.
         set ramp [::simmerblau::logic::generate_ramp \
-            -total $::simmerblau::total \
+            -total $total \
             -hStart $::simmerblau::hStart \
             -hCycles $::simmerblau::hCycles \
             -hStartCenter $::simmerblau::hStartCenter \
@@ -384,20 +401,113 @@ proc ::simmerblau::update_preview {args} {
             -curveMethod $::simmerblau::curveMethod \
             -curveAccent $::simmerblau::curveAccent \
             -useHarvey $::simmerblau::useHarvey \
-            -harmony $::simmerblau::harmony
-        ]
-    }]} { return }
-    set height [winfo height $canvas]
-    if {$height <= 1} { set height 700 }
-    set width [winfo width $canvas]
-    if {$width <= 1} { set width 80 }
-    set step [expr {double($height) / [llength $ramp]}]
-    set y 0
-    foreach color $ramp {
-        if {$::simmerblau::colorSpace == "OKLCH"} { set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]] } else { set rgb [::simmerblau::logic::hsl2rgb {*}$color] }
+            -harmony $::simmerblau::harmony]
+
+        # Calculate color for this slot.
+        set color_idx $idx
+        if {$idx >= [llength $ramp]} { set color_idx [expr {[llength $ramp] - 1}] }
+        if {$color_idx < 0} { set color_idx 0 }
+
+        set color [lindex $ramp $color_idx]
+        if {$::simmerblau::colorSpace == "OKLCH"} {
+            set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]]
+        } else {
+            set rgb [::simmerblau::logic::hsl2rgb {*}$color]
+        }
+        dict set lockedColors $idx $rgb
+    }
+    ::simmerblau::update_preview
+    if {$::simmerblau::livePreview} { ::simmerblau::apply_ramp }
+}
+
+proc ::simmerblau::update_preview {args} {
+    variable w; if {![winfo exists $w]} return
+    set canvas $w.cv
+    $canvas delete all
+
+    set height [winfo height $canvas]; if {$height <= 1} { set height 700 }
+    set width [winfo width $canvas]; if {$width <= 1} { set width 100 }
+    set half [expr {$width / 2.0}]
+
+    # Full colorscale gradient.
+    # Visual resolution for preview.
+    set num_scale 256
+    if {[catch {
+        set scale_ramp [::simmerblau::logic::generate_ramp \
+            -total $num_scale \
+            -hStart $::simmerblau::hStart \
+            -hCycles $::simmerblau::hCycles \
+            -hStartCenter $::simmerblau::hStartCenter \
+            -sRange [list $::simmerblau::sMin $::simmerblau::sMax] \
+            -lRange [list $::simmerblau::lMin $::simmerblau::lMax] \
+            -curveMethod $::simmerblau::curveMethod \
+            -curveAccent $::simmerblau::curveAccent \
+            -useHarvey $::simmerblau::useHarvey \
+            -harmony $::simmerblau::harmony]
+    } msg]} { return }
+
+    set s_step [expr {double($height) / $num_scale}]
+    set sy 0
+    foreach color $scale_ramp {
+        if {$::simmerblau::colorSpace == "OKLCH"} {
+            set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]]
+        } else {
+            set rgb [::simmerblau::logic::hsl2rgb {*}$color]
+        }
         set hex [format "#%02x%02x%02x" [expr {int([lindex $rgb 0]*255)}] [expr {int([lindex $rgb 1]*255)}] [expr {int([lindex $rgb 2]*255)}]]
-        $canvas create rectangle 0 $y $width [expr {$y + $step}] -fill $hex -outline ""
-        set y [expr {$y + $step}]
+        $canvas create rectangle $half $sy $width [expr {$sy + $s_step}] -fill $hex -outline ""
+        set sy [expr {$sy + $s_step}]
+    }
+
+    # Discrete palette for the Color IDs.
+    set num_palette 33
+    set p_ramp [::simmerblau::logic::generate_ramp \
+        -total $::simmerblau::total \
+        -hStart $::simmerblau::hStart \
+        -hCycles $::simmerblau::hCycles \
+        -hStartCenter $::simmerblau::hStartCenter \
+        -sRange [list $::simmerblau::sMin $::simmerblau::sMax] \
+        -lRange [list $::simmerblau::lMin $::simmerblau::lMax] \
+        -curveMethod $::simmerblau::curveMethod \
+        -curveAccent $::simmerblau::curveAccent \
+        -useHarvey $::simmerblau::useHarvey \
+        -harmony $::simmerblau::harmony]
+
+    set p_step [expr {double($height) / $num_palette}]
+    for {set i 0} {$i < $num_palette} {incr i} {
+        set py [expr {$i * $p_step}]
+
+        # Determine the cell's color.
+        if {[dict exists $::simmerblau::lockedColors $i]} {
+            set rgb [dict get $::simmerblau::lockedColors $i]
+            set is_locked 1
+        } else {
+            set color_idx $i
+            if {$i >= [llength $p_ramp]} { set color_idx [expr {[llength $p_ramp] - 1}] }
+            if {$color_idx < 0} { set color_idx 0 }
+            set color [lindex $p_ramp $color_idx]
+            if {$::simmerblau::colorSpace == "OKLCH"} {
+                set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]]
+            } else {
+                set rgb [::simmerblau::logic::hsl2rgb {*}$color]
+            }
+            set is_locked 0
+        }
+
+        set hex [format "#%02x%02x%02x" [expr {int([lindex $rgb 0]*255)}] [expr {int([lindex $rgb 1]*255)}] [expr {int([lindex $rgb 2]*255)}]]
+        $canvas create rectangle 0 $py $half [expr {$py + $p_step}] -fill $hex -outline "#ffffff"
+
+        # Visual indicator for locking.
+        if {$is_locked} {
+            set cx [expr {$half / 2.0}]
+            set cy [expr {$py + $p_step / 2.0}]
+            set r 3
+            # Contrast dot.
+            set dot_fill "white"
+            set lum [expr {0.2126*[lindex $rgb 0] + 0.7152*[lindex $rgb 1] + 0.0722*[lindex $rgb 2]}]
+            if {$lum > 0.5} { set dot_fill "black" }
+            $canvas create oval [expr {$cx-$r}] [expr {$cy-$r}] [expr {$cx+$r}] [expr {$cy+$r}] -fill $dot_fill -outline ""
+        }
     }
 }
 
@@ -420,8 +530,20 @@ proc ::simmerblau::apply_ramp {} {
         set i 0
         foreach color $ramp {
             if {$i > 32} break
+            # Skip white.
             if {$i == 8} { incr i }
-            if {$::simmerblau::colorSpace == "OKLCH"} { set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]] } else { set rgb [::simmerblau::logic::hsl2rgb {*}$color] }
+
+            # Respect locked colors.
+            if {[dict exists $::simmerblau::lockedColors $i]} {
+                incr i
+                continue
+            }
+
+            if {$::simmerblau::colorSpace == "OKLCH"} {
+                set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]]
+            } else {
+                set rgb [::simmerblau::logic::hsl2rgb {*}$color]
+            }
             color change rgb $i {*}$rgb
             incr i
         }

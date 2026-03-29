@@ -12,7 +12,13 @@ namespace eval ::simmerblau::logic {
         return $h
     }
 
+    # From the RampenSau README:
+    #   Transforms a hue to create a more evenly distributed spectrum without the over-abundance of
+    #   green and ultramarine in the standard HSL/HSV color wheel. Originally written by
+    #   [@harvey](https://twitter.com/harvey_rayner/status/1748159440010809665) and adapted for
+    #   use in RampenSau.
     proc harvey_hue {h} {
+        variable PI
         set h [expr {[normalize_hue $h] / 360.0}]
         if {$h == 1.0 || $h == 0.0} { return [expr {$h * 360.0}] }
         set seg [expr {1.0 / 6.0}]
