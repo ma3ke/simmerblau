@@ -316,7 +316,8 @@ proc ::simmerblau::simmerblau_gui {} {
     foreach var {total hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent targetRange livePreview useHarvey colorSpace harmony} { trace add variable ::simmerblau::$var write "::simmerblau::trace_update" }
 
     # Byline at the bottom.
-    label $f.byline -text "By Marieke Westendorp & Aster Kovács, based on Rampensau by David Aerne (meodai)." \
+    label $f.byline -text "By Marieke Westendorp & Aster Kovács at the University of Groningen.\n\
+        Based on Rampensau by David Aerne (meodai)." \
         -font "$font 7 italic" -fg $fg_subtle -wraplength $wraplength -justify center
     pack $f.byline -side bottom -fill x -pady {10 0}
 
@@ -561,4 +562,4 @@ proc ::simmerblau::apply_ramp {} {
     }
 }
 
-if {[info commands vmd_install_extension] != ""} { vmd_install_extension simmerblau simmerblau_tk_cb $::simmerblau::plugin_title }
+if {[info commands vmd_install_extension] != ""} { vmd_install_extension simmerblau simmerblau_tk_cb "Visualization/Simmerblau Colors" }
