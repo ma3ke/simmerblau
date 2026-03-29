@@ -179,7 +179,11 @@ proc ::simmerblau::simmerblau_gui {} {
 
     variable w
 
-    if {[winfo exists .simmerblau]} { wm deiconify .simmerblau; raise .simmerblau; return }
+    if {[winfo exists .simmerblau]} {
+        wm deiconify .simmerblau
+        raise .simmerblau
+        return
+    }
     set w [toplevel ".simmerblau"]
     wm title $w $::simmerblau::plugin_title
     wm resizable $w 1 1
@@ -265,7 +269,8 @@ proc ::simmerblau::simmerblau_gui {} {
         if {$name != ""} { ::simmerblau::save_palette $name }
     }
     button $frl.refresh -text "Refresh" -command ::simmerblau::refresh_library
-    pack $frl.save $frl.refresh -side left -expand 1
+    button $frl.rand -text "Randomize palette" -command ::simmerblau::randomize
+    pack $frl.save $frl.refresh $frl.rand -side left -expand 1
     pack $frl -fill x
 
 
