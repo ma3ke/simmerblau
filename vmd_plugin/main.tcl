@@ -298,7 +298,6 @@ proc ::simmerblau::simmerblau_gui {} {
 
     set pa [labelframe $f.apply -text "Apply to target" -padx $framepad -pady $framepad]
     pack $pa -fill x -pady $pad
-    ::simmerblau::create_control $pa "Steps" total 1 128 1
 
     set frt [frame $pa.frt]
     radiobutton $frt.r1 -text "Color IDs (0-32)" -value "0-32" -variable ::simmerblau::targetRange
