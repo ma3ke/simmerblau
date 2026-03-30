@@ -2,6 +2,7 @@
 # distributed under the MIT license.
 
 package provide simmerblau_rampensau 1.0
+package require simmerblau_logic 1.0
 
 namespace eval ::simmerblau::logic::rampensau {
     variable PI 3.1415926535897931

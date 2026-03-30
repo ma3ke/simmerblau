@@ -45,7 +45,7 @@ proc simmerblau_tk_cb {} {
 
 proc ::simmerblau::get_current_state {} {
     set state {}
-    foreach var {total hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent useHarvey colorSpace harmony} {
+    foreach var {technique total hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent useHarvey colorSpace harmony} {
         dict set state $var [set ::simmerblau::$var]
     }
     return $state
@@ -53,6 +53,16 @@ proc ::simmerblau::get_current_state {} {
 
 proc ::simmerblau::set_current_state {state} {
     foreach {var val} $state { set ::simmerblau::$var $val }
+    variable w
+    if {[winfo exists $w.f.nb]} {
+        set nb $w.f.nb
+        foreach tab [$nb tabs] {
+            if {[string tolower [$nb tab $tab -text]] == [string tolower $::simmerblau::technique]} {
+                $nb select $tab
+                break
+            }
+        }
+    }
     ::simmerblau::update_preview
 }
 
@@ -117,9 +127,15 @@ proc ::simmerblau::get_storage_path {} {
 proc ::simmerblau::generate_ramp {total {extra_params ""}} {
     variable technique
     if {$extra_params == ""} {
-        set extra_params [::simmerblau::get_${technique}_params]
+        if {[info procs ::simmerblau::get_${technique}_params] != ""} {
+            set extra_params [::simmerblau::get_${technique}_params]
+        }
     }
-    return [::simmerblau::logic::${technique}::generate_ramp -total $total {*}$extra_params]
+    if {[info procs ::simmerblau::logic::${technique}::generate_ramp] != ""} {
+        return [::simmerblau::logic::${technique}::generate_ramp -total $total {*}$extra_params]
+    }
+    # Fallback to rampensau if technique is unknown.
+    return [::simmerblau::logic::rampensau::generate_ramp -total $total {*}$extra_params]
 }
 
 proc ::simmerblau::get_rampensau_params {} {
@@ -195,6 +211,12 @@ proc ::simmerblau::step_value {var res dir from to} {
     if {$res < 1} { set ::simmerblau::$var [format "%.2f" $newVal] } else { set ::simmerblau::$var [expr {int($newVal)}] }
 }
 
+proc ::simmerblau::on_tab_changed {nb} {
+    variable technique
+    set technique [string tolower [$nb tab current -text]]
+    ::simmerblau::update_preview
+}
+
 # This is the most cursed mess you will ever see. I am so sorry.
 proc ::simmerblau::simmerblau_gui {} {
     set font "Helvetica"
@@ -226,7 +248,14 @@ proc ::simmerblau::simmerblau_gui {} {
     grid columnconfigure $w 1 -weight 1
     grid rowconfigure $w 0 -weight 1
 
-    set pm [labelframe $f.mode -text "Color space" -padx $framepad -pady $framepad]
+    set nb [ttk::notebook $f.nb]
+    pack $nb -fill both -expand 1 -pady $pad
+    bind $nb <<NotebookTabChanged>> { ::simmerblau::on_tab_changed %W }
+
+    set frs [frame $nb.rampensau -padx $framepad -pady $framepad]
+    $nb add $frs -text "RampenSau"
+
+    set pm [labelframe $frs.mode -text "Color space" -padx $framepad -pady $framepad]
     pack $pm -fill x -pady $pad
     label $pm.desc -text "OKLCH tries to provide uniform perceived brightness. \
         The Harvey fix smooths out clumped blue/green hues to give a more natural spectrum." \
@@ -241,7 +270,7 @@ proc ::simmerblau::simmerblau_gui {} {
     pack $frm.l1 $frm.r1 $frm.r2 $frm.c1 -side left -padx $pad
     pack $frm -fill x
 
-    set phue [labelframe $f.hue -text "Hue" -padx $framepad -pady $framepad]
+    set phue [labelframe $frs.hue -text "Hue" -padx $framepad -pady $framepad]
     pack $phue -fill x -pady $pad
     label $phue.desc -text "Defines the path through the color wheel." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
@@ -258,7 +287,7 @@ proc ::simmerblau::simmerblau_gui {} {
     ::simmerblau::create_control $phue "Center" hStartCenter 0 1
     foreach child [winfo children $phue] { if {$child != "$frh" && $child != "$phue.desc"} { pack $child -fill x -expand 1 } }
 
-    set psl [labelframe $f.sl -text "Vibrancy & brightness" -padx $framepad -pady $framepad]
+    set psl [labelframe $frs.sl -text "Vibrancy & brightness" -padx $framepad -pady $framepad]
     pack $psl -fill x -pady $pad
     label $psl.desc -text "Controls color intensity and brightness." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
@@ -269,7 +298,7 @@ proc ::simmerblau::simmerblau_gui {} {
     ::simmerblau::create_control $psl "Lightness max" lMax 0 1
     foreach child [winfo children $psl] { if {$child != "$psl.desc"} { pack $child -fill x -expand 1 } }
 
-    set pc [labelframe $f.curve -text "Flow" -padx $framepad -pady $framepad]
+    set pc [labelframe $frs.curve -text "Flow" -padx $framepad -pady $framepad]
     pack $pc -fill x -pady $pad
     label $pc.desc -text "Control the accelaration through the color ramp." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
