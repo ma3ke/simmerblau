@@ -13,8 +13,9 @@ package require simmerblau_colorinator 1.0
 
 namespace eval ::simmerblau:: {
     variable w
-    variable total 32
     variable technique "rampensau"
+    # PALETTE_SIZE is the number of colors in VMD's standard palette (0-32).
+    set PALETTE_SIZE 33
     variable colorinator_map "SBW"
     variable colorinator_stops {{0.00 {0.15 0.55 0.90}} {0.50 {1.00 1.00 1.00}} {1.00 {0.85 0.40 0.05}}}
     variable hStart 180.0
@@ -53,7 +54,7 @@ proc simmerblau_tk_cb {} {
 
 proc ::simmerblau::get_current_state {} {
     set state {}
-    foreach var {technique total colorinator_map colorinator_stops selected_stop_idx hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent useHarvey colorSpace harmony} {
+    foreach var {technique colorinator_map colorinator_stops hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent useHarvey colorSpace harmony} {
         dict set state $var [set ::simmerblau::$var]
     }
     return $state
@@ -231,7 +232,8 @@ proc ::simmerblau::save_palette {name} {
     package require json::write
     set path [::simmerblau::get_storage_path]
     set filename [file join $path "${name}.json"]
-    set ramp [::simmerblau::generate_ramp $::simmerblau::total]
+    # Save with palette resolution.
+    set ramp [::simmerblau::generate_ramp $::simmerblau::PALETTE_SIZE]
     set hex_items {}
     foreach rgb $ramp {
         lappend hex_items [json::write string [format "#%02x%02x%02x" [expr {int([lindex $rgb 0]*255)}] [expr {int([lindex $rgb 1]*255)}] [expr {int([lindex $rgb 2]*255)}]]]
@@ -485,7 +487,7 @@ proc ::simmerblau::colorinator_step_stop_pos {idx widget dir} {
     if {$newVal < 0.0} { set newVal 0.0 }
     if {$newVal > 1.0} { set newVal 1.0 }
     $widget delete 0 end
-    $widget insert 0 [format "%.2f" $newVal]
+    $widget insert 0 [format "%.3f" $newVal]
     ::simmerblau::colorinator_update_stop_pos $idx $widget
 }
 
@@ -610,7 +612,7 @@ proc ::simmerblau::simmerblau_gui {} {
 
     # Header with Undo/Redo and Technique transfer buttons.
     set frh [frame $f.frh]
-    pack $frh -fill x -pady "0 $pad"
+    pack $frh -fill x -pady 1
     button $frh.undo -text "Undo" -command ::simmerblau::trigger_undo
     button $frh.redo -text "Redo" -command ::simmerblau::trigger_redo
     button $frh.to_col -text "Bring to Colorinator" -command ::simmerblau::bring_to_colorinator
@@ -795,7 +797,7 @@ proc ::simmerblau::simmerblau_gui {} {
     pack $frt.r1 $frt.r2 $frt.live -side left -padx 5
     pack $frt.btn -side right -padx 5
     pack $frt -fill x -pady 2
-    foreach var {technique total colorinator_map colorinator_stops selected_stop_idx hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent targetRange livePreview useHarvey colorSpace harmony} { trace add variable ::simmerblau::$var write "::simmerblau::trace_update" }
+    foreach var {technique colorinator_map colorinator_stops selected_stop_idx hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent targetRange livePreview useHarvey colorSpace harmony} { trace add variable ::simmerblau::$var write "::simmerblau::trace_update" }
     trace add variable ::simmerblau::colorinator_map write "::simmerblau::colorinator_load_preset"
     foreach var {cur_r cur_g cur_b} { trace add variable ::simmerblau::$var write "::simmerblau::colorinator_update_from_sliders" }
 
@@ -853,7 +855,6 @@ proc ::simmerblau::trace_update {args} {
 proc ::simmerblau::on_canvas_click {x y} {
     variable w
     variable lockedColors
-    variable total
 
     set canvas $w.cv
     set width [winfo width $canvas]
@@ -862,7 +863,7 @@ proc ::simmerblau::on_canvas_click {x y} {
 
     set height [winfo height $canvas]
     # We always show 33 slots for the palette side.
-    set num_boxes 33
+    set num_boxes $::simmerblau::PALETTE_SIZE
     set step [expr {double($height) / $num_boxes}]
     set idx [expr {int(floor($y / $step))}]
 
@@ -870,7 +871,7 @@ proc ::simmerblau::on_canvas_click {x y} {
         dict unset lockedColors $idx
     } else {
         # Lock current projected color.
-        set ramp [::simmerblau::generate_ramp $total]
+        set ramp [::simmerblau::generate_ramp $::simmerblau::PALETTE_SIZE]
 
         # Calculate the color value for this specific slot.
         set color_idx $idx
@@ -910,8 +911,8 @@ proc ::simmerblau::update_preview {args} {
     }
 
     # Discrete palette for the Color IDs.
-    set num_palette 33
-    set p_ramp [::simmerblau::generate_ramp $::simmerblau::total]
+    set num_palette $::simmerblau::PALETTE_SIZE
+    set p_ramp [::simmerblau::generate_ramp $num_palette]
 
     set p_step [expr {double($height) / $num_palette}]
     for {set i 0} {$i < $num_palette} {incr i} {
@@ -1053,29 +1054,30 @@ proc ::simmerblau::on_mouse_up {x y} {
 
 proc ::simmerblau::apply_ramp {} {
     variable targetRange
-    variable total
-    set ramp [::simmerblau::generate_ramp $::simmerblau::total]
     if {$targetRange == "0-32"} {
+        set ramp [::simmerblau::generate_ramp $::simmerblau::PALETTE_SIZE]
         set i 0
         foreach rgb $ramp {
-            if {$i > 32} break
-            # Skip white.
-            if {$i == 8} { incr i }
-
+            if {$i >= $::simmerblau::PALETTE_SIZE} break
+            # Skip white (Color ID 8).
+            if {$i == 8} { incr i; continue }
             # Respect locked colors.
             if {[dict exists $::simmerblau::lockedColors $i]} {
                 incr i
                 continue
             }
-
-            color change rgb $i {*}$rgb
+            lassign $rgb r g b
+            color change rgb $i $r $g $b
             incr i
         }
     } else {
+        # Update VMD color scale.
         set start_id [colorinfo num]
         set max_id [colorinfo max]
         set num_colors [expr {$max_id - $start_id}]
         if {$num_colors <= 0} return
+        
+        # We generate a ramp that matches the exact number of slots VMD has.
         set scale_ramp [::simmerblau::generate_ramp $num_colors]
         set i $start_id
         foreach rgb $scale_ramp {
