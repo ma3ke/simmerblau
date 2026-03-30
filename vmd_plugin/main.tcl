@@ -9,11 +9,14 @@ package provide simmerblau 1.0
 
 package require simmerblau_logic 1.0
 package require simmerblau_rampensau 1.0
+package require simmerblau_colorinator 1.0
 
 namespace eval ::simmerblau:: {
     variable w
     variable total 32
     variable technique "rampensau"
+    variable colorinator_map "SBW"
+    variable colorinator_stops {{0.00 {0.15 0.55 0.90}} {0.50 {1.00 1.00 1.00}} {1.00 {0.85 0.40 0.05}}}
     variable hStart 180.0
     variable hCycles 1.0
     variable hStartCenter 0.5
@@ -32,8 +35,12 @@ namespace eval ::simmerblau:: {
     variable undoStack {}
     variable redoStack {}
     variable snapshotAfterID ""
-    # Dictionary of the index to {r g b}.
+    # This dictionary maps the color index to its {r g b} values.
     variable lockedColors {}
+    variable selected_stop_idx 0
+    variable cur_r 0.0
+    variable cur_g 0.0
+    variable cur_b 0.0
     set plugin_title "Simmerblau Colors"
     set label_width 14
 }
@@ -45,7 +52,7 @@ proc simmerblau_tk_cb {} {
 
 proc ::simmerblau::get_current_state {} {
     set state {}
-    foreach var {technique total hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent useHarvey colorSpace harmony} {
+    foreach var {technique total colorinator_map pecoc_stops hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent useHarvey colorSpace harmony} {
         dict set state $var [set ::simmerblau::$var]
     }
     return $state
@@ -62,6 +69,10 @@ proc ::simmerblau::set_current_state {state} {
                 break
             }
         }
+    }
+    # Update the Colorinator stop editor if it exists.
+    if {[winfo exists $w.f.nb.colorinator]} {
+        ::simmerblau::pecoc_refresh_editor
     }
     ::simmerblau::update_preview
 }
@@ -131,11 +142,29 @@ proc ::simmerblau::generate_ramp {total {extra_params ""}} {
             set extra_params [::simmerblau::get_${technique}_params]
         }
     }
+
+    set raw_ramp ""
     if {[info procs ::simmerblau::logic::${technique}::generate_ramp] != ""} {
-        return [::simmerblau::logic::${technique}::generate_ramp -total $total {*}$extra_params]
+        set raw_ramp [::simmerblau::logic::${technique}::generate_ramp -total $total {*}$extra_params]
+    } else {
+        # Fallback to rampensau if technique is unknown.
+        set raw_ramp [::simmerblau::logic::rampensau::generate_ramp -total $total {*}$extra_params]
     }
-    # Fallback to rampensau if technique is unknown.
-    return [::simmerblau::logic::rampensau::generate_ramp -total $total {*}$extra_params]
+
+    if {$technique == "colorinator"} {
+        return $raw_ramp
+    }
+
+    # Convert Rampensau HSL to RGB.
+    set rgb_ramp {}
+    foreach color $raw_ramp {
+        if {$::simmerblau::colorSpace == "OKLCH"} {
+            lappend rgb_ramp [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]]
+        } else {
+            lappend rgb_ramp [::simmerblau::logic::hsl2rgb {*}$color]
+        }
+    }
+    return $rgb_ramp
 }
 
 proc ::simmerblau::get_rampensau_params {} {
@@ -152,6 +181,13 @@ proc ::simmerblau::get_rampensau_params {} {
     ]
 }
 
+# This procedure retrieves the parameters required for the colorinator generation technique.
+proc ::simmerblau::get_colorinator_params {} {
+    return [list \
+        -stops $::simmerblau::colorinator_stops \
+    ]
+}
+
 proc ::simmerblau::save_palette {name} {
     if {$name == ""} return
     variable version
@@ -160,8 +196,7 @@ proc ::simmerblau::save_palette {name} {
     set filename [file join $path "${name}.json"]
     set ramp [::simmerblau::generate_ramp $::simmerblau::total]
     set hex_items {}
-    foreach color $ramp {
-        if {$::simmerblau::colorSpace == "OKLCH"} { set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]] } else { set rgb [::simmerblau::logic::hsl2rgb {*}$color] }
+    foreach rgb $ramp {
         lappend hex_items [json::write string [format "#%02x%02x%02x" [expr {int([lindex $rgb 0]*255)}] [expr {int([lindex $rgb 1]*255)}] [expr {int([lindex $rgb 2]*255)}]]]
     }
     set meta [json::write object author [json::write string $::tcl_platform(user)] host [json::write string [info hostname]] date [json::write string [clock format [clock seconds]]] version [json::write string $version] app [json::write string "Simmerblau"]]
@@ -218,6 +253,251 @@ proc ::simmerblau::on_tab_changed {nb} {
 }
 
 # This is the most cursed mess you will ever see. I am so sorry.
+proc ::simmerblau::colorinator_load_preset {args} {
+    variable colorinator_map
+    if {![info exists ::simmerblau::logic::colorinator::colormaps($colorinator_map)]} return
+    set stops [set ::simmerblau::logic::colorinator::colormaps($colorinator_map)]
+    set ::simmerblau::colorinator_stops $stops
+    ::simmerblau::colorinator_select_stop 0
+    ::simmerblau::update_preview
+}
+
+proc ::simmerblau::colorinator_select_stop {idx {force_refresh 0}} {
+    variable selected_stop_idx
+    set old_idx $selected_stop_idx
+    set selected_stop_idx $idx
+    variable colorinator_stops
+    if {$idx < 0 || $idx >= [llength $colorinator_stops]} return
+
+    set stop [lindex $colorinator_stops $idx]
+    lassign $stop pos rgb
+    lassign $rgb r g b
+
+    # Update sliders without triggering their traces to avoid feedback loops.
+    set ::simmerblau::block_slider_trace 1
+    set ::simmerblau::cur_r [format "%.2f" $r]
+    set ::simmerblau::cur_g [format "%.2f" $g]
+    set ::simmerblau::cur_b [format "%.2f" $b]
+    set ::simmerblau::block_slider_trace 0
+
+    # Only refresh the list if forced. Otherwise just update background colors.
+    if {$force_refresh} {
+        ::simmerblau::colorinator_refresh_editor
+    } elseif {$old_idx != $idx} {
+        ::simmerblau::colorinator_update_selection_colors $old_idx $idx
+    }
+}
+
+proc ::simmerblau::colorinator_update_selection_colors {old_idx new_idx} {
+    variable w
+    set f $w.f.nb.colorinator.stops.stops
+    if {![winfo exists $f]} return
+
+    if {$old_idx >= 0 && [winfo exists $f.row_$old_idx]} {
+        $f.row_$old_idx configure -bg white
+        $f.row_$old_idx.l configure -bg white
+    }
+    if {$new_idx >= 0 && [winfo exists $f.row_$new_idx]} {
+        $f.row_$new_idx configure -bg lightblue
+        $f.row_$new_idx.l configure -bg lightblue
+    }
+}
+
+proc ::simmerblau::colorinator_update_from_sliders {args} {
+    variable block_slider_trace
+    if {[info exists block_slider_trace] && $block_slider_trace} return
+
+    variable selected_stop_idx
+    variable colorinator_stops
+    if {$selected_stop_idx < 0 || $selected_stop_idx >= [llength $colorinator_stops]} return
+
+    set rgb [list $::simmerblau::cur_r $::simmerblau::cur_g $::simmerblau::cur_b]
+    lset ::simmerblau::colorinator_stops $selected_stop_idx 1 $rgb
+
+    # Update the color swatch in the list without rebuilding the whole thing.
+    variable w
+    if {[winfo exists $w.f.nb.colorinator.stops.stops.row_$selected_stop_idx.c]} {
+        set hex [format "#%02x%02x%02x" [expr {int([lindex $rgb 0]*255)}] [expr {int([lindex $rgb 1]*255)}] [expr {int([lindex $rgb 2]*255)}]]
+        $w.f.nb.colorinator.stops.stops.row_$selected_stop_idx.c configure -bg $hex
+    }
+
+    ::simmerblau::update_preview
+}
+
+proc ::simmerblau::colorinator_refresh_editor {} {
+    variable w
+    variable selected_stop_idx
+    if {![winfo exists $w.f.nb.colorinator.stops.stops]} return
+    set f $w.f.nb.colorinator.stops.stops
+
+    # If the focus is currently in an entry, we should be careful about destroying it.
+    set focus [focus]
+    set focus_idx -1
+    if {[string match "$f.row_*.e" $focus]} {
+        scan $focus "$f.row_%d.e" focus_idx
+    }
+
+    foreach child [winfo children $f] { destroy $child }
+
+    set i 0
+    foreach stop $::simmerblau::colorinator_stops {
+        lassign $stop pos rgb
+        set hex [format "#%02x%02x%02x" [expr {int([lindex $rgb 0]*255)}] [expr {int([lindex $rgb 1]*255)}] [expr {int([lindex $rgb 2]*255)}]]
+
+        set bg "white"
+        if {$i == $selected_stop_idx} { set bg "lightblue" }
+        set row [frame $f.row_$i -bg $bg]
+        pack $row -fill x -pady 2
+
+        label $row.l -text "Stop [expr {$i+1}]" -width 6 -bg $bg
+        entry $row.e -width 6
+        $row.e insert 0 $pos
+
+        # Bindings:
+        # Return/FocusOut: commit change and re-sort.
+        # Up/Down: step and re-sort.
+        # FocusIn: select but don't rebuild (to avoid losing focus immediately).
+        bind $row.e <Return> [list ::simmerblau::colorinator_update_stop_pos $i %W]
+        bind $row.e <FocusOut> [list ::simmerblau::colorinator_update_stop_pos $i %W]
+        bind $row.e <Up> [list ::simmerblau::colorinator_step_stop_pos $i %W 1]
+        bind $row.e <Down> [list ::simmerblau::colorinator_step_stop_pos $i %W -1]
+        bind $row.e <FocusIn> [list ::simmerblau::colorinator_select_stop $i]
+
+        canvas $row.c -width 20 -height 20 -bg $hex -highlightthickness 1 -highlightbackground black
+        bind $row.c <Button-1> [list ::simmerblau::colorinator_select_stop $i]
+        bind $row.l <Button-1> [list ::simmerblau::colorinator_select_stop $i]
+        bind $row <Button-1>   [list ::simmerblau::colorinator_select_stop $i]
+
+        pack $row.l $row.e $row.c -side left -padx 5
+
+        # Restore focus if we were editing and this is the selected stop.
+        if {$focus_idx >= 0 && $i == $selected_stop_idx} { focus $row.e }
+        incr i
+    }
+}
+
+proc ::simmerblau::colorinator_update_stop_pos {idx widget} {
+    set val [$widget get]
+    if {![string is double $val]} return
+
+    set old_stop [lindex $::simmerblau::colorinator_stops $idx]
+    lassign $old_stop old_val old_rgb
+    if {$val == $old_val} return
+
+    lset ::simmerblau::colorinator_stops $idx 0 $val
+    set ::simmerblau::colorinator_stops [lsort -real -index 0 $::simmerblau::colorinator_stops]
+
+    # Find the new index of the stop we just moved.
+    set new_idx 0
+    foreach stop $::simmerblau::colorinator_stops {
+        if {abs([lindex $stop 0] - $val) < 0.0001 && [lindex $stop 1] == $old_rgb} {
+            break
+        }
+        incr new_idx
+    }
+    ::simmerblau::colorinator_select_stop $new_idx 1
+    ::simmerblau::update_preview
+}
+
+proc ::simmerblau::colorinator_step_stop_pos {idx widget dir} {
+    set val [$widget get]
+    if {![string is double $val]} { set val 0.0 }
+    set res 0.01
+    set newVal [expr {$val + $res * $dir}]
+    if {$newVal < 0.0} { set newVal 0.0 }
+    if {$newVal > 1.0} { set newVal 1.0 }
+    $widget delete 0 end
+    $widget insert 0 [format "%.2f" $newVal]
+    ::simmerblau::colorinator_update_stop_pos $idx $widget
+}
+
+proc ::simmerblau::colorinator_pick_color {idx} {
+    set old_rgb [lindex [lindex $::simmerblau::colorinator_stops $idx] 1]
+    set old_hex [format "#%02x%02x%02x" [expr {int([lindex $old_rgb 0]*255)}] [expr {int([lindex $old_rgb 1]*255)}] [expr {int([lindex $old_rgb 2]*255)}]]
+    set new_hex [tk_chooseColor -initialcolor $old_hex -title "Choose Stop Color"]
+    if {$new_hex == ""} return
+
+    # Convert hex to RGB 0..1.
+    scan [string range $new_hex 1 2] %x r
+    scan [string range $new_hex 3 4] %x g
+    scan [string range $new_hex 5 6] %x b
+    set rgb [list [expr {$r/255.0}] [expr {$g/255.0}] [expr {$b/255.0}]]
+
+    lset ::simmerblau::colorinator_stops $idx 1 $rgb
+    ::simmerblau::colorinator_refresh_editor
+    ::simmerblau::update_preview
+}
+
+proc ::simmerblau::colorinator_add_stop {} {
+    variable colorinator_stops
+    set n [llength $colorinator_stops]
+    if {$n == 0} {
+        set colorinator_stops {{0.5 {0.5 0.5 0.5}}}
+        set new_idx 0
+    } else {
+        set last [lindex $colorinator_stops end]
+        lassign $last pos rgb
+        set new_pos [expr {$pos + 0.1}]
+        if {$new_pos > 1.0} { set new_pos 1.0 }
+        lappend colorinator_stops [list $new_pos $rgb]
+        set new_idx [expr {[llength $colorinator_stops] - 1}]
+    }
+    # Sort stops by position.
+    set colorinator_stops [lsort -real -index 0 $colorinator_stops]
+    # Find where the new stop ended up.
+    set i 0
+    foreach stop $colorinator_stops {
+        if {[lindex $stop 0] == $new_pos} { set new_idx $i; break }
+        incr i
+    }
+    ::simmerblau::colorinator_select_stop $new_idx 1
+    ::simmerblau::update_preview
+}
+
+proc ::simmerblau::colorinator_remove_stop {} {
+    variable colorinator_stops
+    variable selected_stop_idx
+    if {[llength $colorinator_stops] > 1} {
+        set colorinator_stops [lreplace $colorinator_stops $selected_stop_idx $selected_stop_idx]
+        if {$selected_stop_idx >= [llength $colorinator_stops]} {
+            set selected_stop_idx [expr {[llength $colorinator_stops] - 1}]
+        }
+    }
+    ::simmerblau::colorinator_select_stop $selected_stop_idx 1
+    ::simmerblau::update_preview
+}
+
+proc ::simmerblau::colorinator_snap_spacing {type} {
+    set n [llength $::simmerblau::colorinator_stops]
+    if {$n < 2} return
+
+    set positions {}
+    switch $type {
+        "uniform" {
+            for {set i 0} {$i < $n} {incr i} { lappend positions [expr {double($i) / ($n - 1)}] }
+        }
+        "quartile" {
+            set q [list 0.0 0.25 0.5 0.75 1.0]
+            for {set i 0} {$i < $n} {incr i} {
+                if {$i < [llength $q]} { lappend positions [lindex $q $i] } else { lappend positions 1.0 }
+            }
+        }
+        "boxplot" {
+            set q [list 0.0 0.25 0.48 0.52 0.75 1.0]
+            for {set i 0} {$i < $n} {incr i} {
+                if {$i < [llength $q]} { lappend positions [lindex $q $i] } else { lappend positions 1.0 }
+            }
+        }
+    }
+
+    for {set i 0} {$i < $n} {incr i} {
+        lset ::simmerblau::colorinator_stops $i 0 [lindex $positions $i]
+    }
+    variable selected_stop_idx
+    ::simmerblau::colorinator_select_stop $selected_stop_idx 1
+    ::simmerblau::update_preview
+}
+
 proc ::simmerblau::simmerblau_gui {} {
     set font "Helvetica"
     set font_explanation "Times 10 italic"
@@ -254,6 +534,62 @@ proc ::simmerblau::simmerblau_gui {} {
 
     set frs [frame $nb.rampensau -padx $framepad -pady $framepad]
     $nb add $frs -text "RampenSau"
+
+    set frp [frame $nb.colorinator -padx $framepad -pady $framepad]
+    $nb add $frp -text "Colorinator"
+
+    # This section contains the controls for the Colorinator technique.
+    set pcm [labelframe $frp.cmap -text "Colormap" -padx $framepad -pady $framepad]
+    pack $pcm -fill x -pady $pad
+    label $pcm.desc -text "Flexible color mapping with adjustable control points. \
+        Based on Colorinator in PECOC by Tsjerk Wassenaar." \
+        -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
+    pack $pcm.desc -anchor w -pady "0 $pad"
+
+    set frc [frame $pcm.frc]
+    label $frc.l -text "Map" -width $::simmerblau::label_width -anchor w
+    set c_opts [list "SBW" "BWR" "PRGn" "Spectral" "Viridis" "BGW" "RYW" "PMG" "HWC" "Blues" "Reds" "VanGogh" "Peacock" "Heat" "BWO" "PeacockMagenta"]
+    eval [list tk_optionMenu $frc.m ::simmerblau::colorinator_map] $c_opts
+    pack $frc.l $frc.m -side left
+    pack $frc -fill x -pady $pad
+
+    set pce [labelframe $frp.editor -text "Stop Color" -padx $framepad -pady $framepad]
+    pack $pce -fill x -pady $pad
+    label $pce.desc -text "Adjust RGB values of the selected stop." \
+        -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
+    pack $pce.desc -anchor w -pady "0 $pad"
+
+    ::simmerblau::create_control $pce "Red" cur_r 0 1
+    ::simmerblau::create_control $pce "Green" cur_g 0 1
+    ::simmerblau::create_control $pce "Blue" cur_b 0 1
+    foreach child [winfo children $pce] { if {$child != "$pce.desc"} { pack $child -fill x -expand 1 } }
+
+    set pms [labelframe $frp.stops -text "Custom Stops" -padx $framepad -pady $framepad]
+    pack $pms -fill both -expand 1 -pady $pad
+
+    label $pms.desc -text "Fine-tune individual control points and colors." \
+        -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
+    pack $pms.desc -anchor w -pady "0 $pad"
+
+    set fbn [frame $pms.btns]
+    pack $fbn -fill x -pady $pad
+    button $fbn.add -text "Add Stop" -command ::simmerblau::colorinator_add_stop
+    button $fbn.rem -text "Remove Stop" -command ::simmerblau::colorinator_remove_stop
+    pack $fbn.add $fbn.rem -side left -padx 2
+
+    set fst [frame $pms.stops]
+    pack $fst -fill both -expand 1 -pady $pad
+
+    set fsn [frame $pms.snap]
+    pack $fsn -fill x -pady $pad
+    label $fsn.desc -text "Snap positions to common distributions:" \
+        -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
+    pack $fsn.desc -anchor w -pady "5 2"
+
+    button $fsn.uni -text "Uniform" -command {::simmerblau::colorinator_snap_spacing "uniform"}
+    button $fsn.qua -text "Quartile" -command {::simmerblau::colorinator_snap_spacing "quartile"}
+    button $fsn.box -text "Boxplot" -command {::simmerblau::colorinator_snap_spacing "boxplot"}
+    pack $fsn.uni $fsn.qua $fsn.box -side left -padx 2
 
     set pm [labelframe $frs.mode -text "Color space" -padx $framepad -pady $framepad]
     pack $pm -fill x -pady $pad
@@ -354,17 +690,21 @@ proc ::simmerblau::simmerblau_gui {} {
     button $frh.redo -text "Redo" -command ::simmerblau::trigger_redo
     pack $frh.undo $frh.redo -side left -expand 1
     pack $frh -fill x -pady $pad
-    foreach var {total hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent targetRange livePreview useHarvey colorSpace harmony} { trace add variable ::simmerblau::$var write "::simmerblau::trace_update" }
+    foreach var {technique total colorinator_map colorinator_stops selected_stop_idx hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent targetRange livePreview useHarvey colorSpace harmony} { trace add variable ::simmerblau::$var write "::simmerblau::trace_update" }
+    trace add variable ::simmerblau::colorinator_map write "::simmerblau::colorinator_load_preset"
+    foreach var {cur_r cur_g cur_b} { trace add variable ::simmerblau::$var write "::simmerblau::colorinator_update_from_sliders" }
 
     # Byline at the bottom.
     label $f.byline -text "By Marieke Westendorp & Aster Kovács at the University of Groningen.\n\
-        Based on Rampensau by David Aerne (meodai)." \
+        Color generation based on RampenSau by David Aerne (meodai)\n\
+        and the Colorinator in the PECOC project by Tsjerk Wassenaar." \
         -font "$font 7 italic" -fg $fg_subtle -wraplength $wraplength -justify center
     pack $f.byline -side bottom -fill x -pady {10 0}
 
     ::simmerblau::refresh_library
     if {[file exists [file join [::simmerblau::get_storage_path] "default.json"]]} { catch { ::simmerblau::load_palette "default" } }
     ::simmerblau::push_undo_snapshot
+    ::simmerblau::colorinator_refresh_editor
     ::simmerblau::update_preview
 }
 
@@ -434,19 +774,15 @@ proc ::simmerblau::on_canvas_click {x y} {
         # Lock current projected color.
         set ramp [::simmerblau::generate_ramp $total]
 
-        # Calculate color for this slot.
+        # Calculate the color value for this specific slot.
         set color_idx $idx
         if {$idx >= [llength $ramp]} { set color_idx [expr {[llength $ramp] - 1}] }
         if {$color_idx < 0} { set color_idx 0 }
 
-        set color [lindex $ramp $color_idx]
-        if {$::simmerblau::colorSpace == "OKLCH"} {
-            set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]]
-        } else {
-            set rgb [::simmerblau::logic::hsl2rgb {*}$color]
-        }
+        set rgb [lindex $ramp $color_idx]
         dict set lockedColors $idx $rgb
-    }
+        }
+
     ::simmerblau::update_preview
     if {$::simmerblau::livePreview} { ::simmerblau::apply_ramp }
 }
@@ -469,12 +805,7 @@ proc ::simmerblau::update_preview {args} {
 
     set s_step [expr {double($height) / $num_scale}]
     set sy 0
-    foreach color $scale_ramp {
-        if {$::simmerblau::colorSpace == "OKLCH"} {
-            set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]]
-        } else {
-            set rgb [::simmerblau::logic::hsl2rgb {*}$color]
-        }
+    foreach rgb $scale_ramp {
         set hex [format "#%02x%02x%02x" [expr {int([lindex $rgb 0]*255)}] [expr {int([lindex $rgb 1]*255)}] [expr {int([lindex $rgb 2]*255)}]]
         $canvas create rectangle $half $sy $width [expr {$sy + $s_step}] -fill $hex -outline ""
         set sy [expr {$sy + $s_step}]
@@ -496,12 +827,7 @@ proc ::simmerblau::update_preview {args} {
             set color_idx $i
             if {$i >= [llength $p_ramp]} { set color_idx [expr {[llength $p_ramp] - 1}] }
             if {$color_idx < 0} { set color_idx 0 }
-            set color [lindex $p_ramp $color_idx]
-            if {$::simmerblau::colorSpace == "OKLCH"} {
-                set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]]
-            } else {
-                set rgb [::simmerblau::logic::hsl2rgb {*}$color]
-            }
+            set rgb [lindex $p_ramp $color_idx]
             set is_locked 0
         }
 
@@ -528,7 +854,7 @@ proc ::simmerblau::apply_ramp {} {
     set ramp [::simmerblau::generate_ramp $::simmerblau::total]
     if {$targetRange == "0-32"} {
         set i 0
-        foreach color $ramp {
+        foreach rgb $ramp {
             if {$i > 32} break
             # Skip white.
             if {$i == 8} { incr i }
@@ -539,11 +865,6 @@ proc ::simmerblau::apply_ramp {} {
                 continue
             }
 
-            if {$::simmerblau::colorSpace == "OKLCH"} {
-                set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]]
-            } else {
-                set rgb [::simmerblau::logic::hsl2rgb {*}$color]
-            }
             color change rgb $i {*}$rgb
             incr i
         }
@@ -554,8 +875,7 @@ proc ::simmerblau::apply_ramp {} {
         if {$num_colors <= 0} return
         set scale_ramp [::simmerblau::generate_ramp $num_colors]
         set i $start_id
-        foreach color $scale_ramp {
-            if {$::simmerblau::colorSpace == "OKLCH"} { set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]] } else { set rgb [::simmerblau::logic::hsl2rgb {*}$color] }
+        foreach rgb $scale_ramp {
             color change rgb $i {*}$rgb
             incr i
         }
