@@ -424,7 +424,7 @@ proc ::simmerblau::colorinator_refresh_editor {} {
         set bg "white"
         if {$i == $selected_stop_idx} { set bg "lightblue" }
         set row [frame $f.row_$i -bg $bg]
-        pack $row -fill x -pady 2
+        pack $row -fill x -pady 0
 
         label $row.l -text "Stop [expr {$i+1}]" -width 6 -bg $bg
         entry $row.e -width 6
@@ -579,8 +579,8 @@ proc ::simmerblau::simmerblau_gui {} {
     set font "Helvetica"
     set font_explanation "Times 10 italic"
     set fg_subtle gray50
-    set pad 5
-    set framepad 10
+    set pad 3
+    set framepad 6
     set wraplength 400
 
     variable w
@@ -593,16 +593,17 @@ proc ::simmerblau::simmerblau_gui {} {
     set w [toplevel ".simmerblau"]
     wm title $w $::simmerblau::plugin_title
     wm resizable $w 1 1
-    wm minsize $w 600 850
+    wm minsize $w 500 758
+
 
     set cv [canvas $w.cv -width 100 -height 700 -bg black -highlightthickness 0]
-    grid $cv -row 0 -column 0 -sticky nsew -padx $pad -pady $pad
+    grid $cv -row 0 -column 0 -sticky nsew -padx $pad -pady 1
     bind $cv <Configure> { ::simmerblau::update_preview }
     bind $cv <Button-1> { ::simmerblau::on_mouse_down %x %y }
     bind $cv <B1-Motion> { ::simmerblau::on_mouse_move %x %y }
     bind $cv <ButtonRelease-1> { ::simmerblau::on_mouse_up %x %y }
 
-    set f [frame $w.f -padx $framepad -pady $framepad]
+    set f [frame $w.f -padx $framepad -pady 3]
     grid $f -row 0 -column 1 -sticky nsew
     grid columnconfigure $w 1 -weight 1
     grid rowconfigure $w 0 -weight 1
@@ -617,17 +618,27 @@ proc ::simmerblau::simmerblau_gui {} {
     pack $frh.to_col -side right -padx 2
 
     set nb [ttk::notebook $f.nb]
-    pack $nb -fill both -expand 1 -pady $pad
+    pack $nb -fill both -expand 1 -pady 1
     bind $nb <<NotebookTabChanged>> { ::simmerblau::on_tab_changed %W }
 
-    set frs [frame $nb.rampensau -padx $framepad -pady $framepad]
+    set frs [frame $nb.rampensau -padx $framepad -pady 3]
     $nb add $frs -text "RampenSau"
 
-    set frp [frame $nb.colorinator -padx $framepad -pady $framepad]
+    # Byline at the bottom of the RampenSau tab.
+    label $frs.byline -text "Based on RampenSau by David Aerne (meodai)." \
+        -font "$font 7 italic" -fg $fg_subtle -wraplength $wraplength -justify center
+    pack $frs.byline -side bottom -fill x -pady {5 0}
+
+    set frp [frame $nb.colorinator -padx $framepad -pady 3]
     $nb add $frp -text "Colorinator"
 
-    set pce [labelframe $frp.editor -text "Stop color" -padx $framepad -pady $framepad]
-    pack $pce -fill x -pady $pad
+    # Byline at the bottom of the Colorinator tab.
+    label $frp.byline -text "Based on Colorinator in the PECOC project by Tsjerk Wassenaar." \
+        -font "$font 7 italic" -fg $fg_subtle -wraplength $wraplength -justify center
+    pack $frp.byline -side bottom -fill x -pady {5 0}
+
+    set pce [labelframe $frp.editor -text "Stop color" -padx $framepad -pady 3]
+    pack $pce -fill x -pady 1
     label $pce.desc -text "Adjust RGB values of the selected stop." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $pce.desc -anchor w -pady "0 $pad"
@@ -637,8 +648,8 @@ proc ::simmerblau::simmerblau_gui {} {
     ::simmerblau::create_control $pce "Blue" cur_b 0 1
     foreach child [winfo children $pce] { if {$child != "$pce.desc"} { pack $child -fill x -expand 1 } }
 
-    set pms [labelframe $frp.stops -text "Custom stops" -padx $framepad -pady $framepad]
-    pack $pms -fill both -expand 1 -pady $pad
+    set pms [labelframe $frp.stops -text "Custom stops" -padx $framepad -pady 3]
+    pack $pms -fill both -expand 1 -pady 1
 
     label $pms.desc -text "Flexible color mapping with adjustable control points. \
         Based on Colorinator in PECOC by Tsjerk Wassenaar." \
@@ -646,16 +657,16 @@ proc ::simmerblau::simmerblau_gui {} {
     pack $pms.desc -anchor w -pady "0 $pad"
 
     set fbn [frame $pms.btns]
-    pack $fbn -fill x -pady $pad
+    pack $fbn -fill x -pady 1
     button $fbn.add -text "Add Stop" -command ::simmerblau::colorinator_add_stop
     button $fbn.rem -text "Remove Stop" -command ::simmerblau::colorinator_remove_stop
     pack $fbn.add $fbn.rem -side left -padx 2
 
     set fst [frame $pms.stops]
-    pack $fst -fill both -expand 1 -pady $pad
+    pack $fst -fill both -expand 1 -pady 1
 
     set fsn [frame $pms.snap]
-    pack $fsn -fill x -pady $pad
+    pack $fsn -fill x -pady 1
     label $fsn.desc -text "Snap positions to common distributions or load a preset map:" \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $fsn.desc -anchor w -pady "5 2"
@@ -670,8 +681,8 @@ proc ::simmerblau::simmerblau_gui {} {
     eval [list tk_optionMenu $fsn.m ::simmerblau::colorinator_map] $c_opts
     pack $fsn.m -side right -padx 2
 
-    set pm [labelframe $frs.mode -text "Color space" -padx $framepad -pady $framepad]
-    pack $pm -fill x -pady $pad
+    set pm [labelframe $frs.mode -text "Color space" -padx $framepad -pady 3]
+    pack $pm -fill x -pady 1
     label $pm.desc -text "OKLCH tries to provide uniform perceived brightness. \
         The Harvey fix smooths out clumped blue/green hues to give a more natural spectrum." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
@@ -685,8 +696,8 @@ proc ::simmerblau::simmerblau_gui {} {
     pack $frm.l1 $frm.r1 $frm.r2 $frm.c1 -side left -padx $pad
     pack $frm -fill x
 
-    set phue [labelframe $frs.hue -text "Hue" -padx $framepad -pady $framepad]
-    pack $phue -fill x -pady $pad
+    set phue [labelframe $frs.hue -text "Hue" -padx $framepad -pady 3]
+    pack $phue -fill x -pady 1
     label $phue.desc -text "Defines the path through the color wheel." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $phue.desc -anchor w -pady "0 $pad"
@@ -698,14 +709,14 @@ proc ::simmerblau::simmerblau_gui {} {
     button $frh.rand -text "Randomize palette" -command ::simmerblau::randomize
     pack $frh.l $frh.m -side left
     pack $frh.rand -side right
-    pack $frh -fill x -pady $pad
+    pack $frh -fill x -pady 1
     ::simmerblau::create_control $phue "Start" hStart 0 360 1
     ::simmerblau::create_control $phue "Cycles" hCycles -2 2
     ::simmerblau::create_control $phue "Center" hStartCenter 0 1
     foreach child [winfo children $phue] { if {$child != "$frh" && $child != "$phue.desc"} { pack $child -fill x -expand 1 } }
 
-    set psl [labelframe $frs.sl -text "Vibrancy & brightness" -padx $framepad -pady $framepad]
-    pack $psl -fill x -pady $pad
+    set psl [labelframe $frs.sl -text "Vibrancy & brightness" -padx $framepad -pady 3]
+    pack $psl -fill x -pady 1
     label $psl.desc -text "Controls color intensity and brightness." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $psl.desc -anchor w -pady "0 $pad"
@@ -715,8 +726,8 @@ proc ::simmerblau::simmerblau_gui {} {
     ::simmerblau::create_control $psl "Lightness max" lMax 0 1
     foreach child [winfo children $psl] { if {$child != "$psl.desc"} { pack $child -fill x -expand 1 } }
 
-    set pc [labelframe $frs.curve -text "Flow" -padx $framepad -pady $framepad]
-    pack $pc -fill x -pady $pad
+    set pc [labelframe $frs.curve -text "Flow" -padx $framepad -pady 3]
+    pack $pc -fill x -pady 1
     label $pc.desc -text "Control the accelaration through the color ramp." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $pc.desc -anchor w -pady "0 $pad"
@@ -733,8 +744,8 @@ proc ::simmerblau::simmerblau_gui {} {
     ::simmerblau::create_control $pc "Flow intensity" curveAccent 0 5
     foreach child [winfo children $pc] { if {$child != "$frc" && $child != "$pc.desc"} { pack $child -fill x -expand 1 } }
 
-    set pl [labelframe $f.lib -text "Palette library" -padx $framepad -pady $framepad]
-    pack $pl -fill x -pady $pad
+    set pl [labelframe $f.lib -text "Palette library" -padx $framepad -pady 3]
+    pack $pl -fill x -pady 1
 
     label $pl.desc -text "Palettes will be loaded from the .simmerblau directory if present. \
         Globally accessible palettes are stored in ~/.config/simmerblau." \
@@ -742,9 +753,9 @@ proc ::simmerblau::simmerblau_gui {} {
     pack $pl.desc -anchor w -pady "0 $pad"
 
     set frtv [frame $pl.frtv]
-    pack $frtv -fill x -pady $pad
+    pack $frtv -fill x -pady 1
 
-    ttk::treeview $frtv.tv -columns {tech} -show tree -height 5 -selectmode browse
+    ttk::treeview $frtv.tv -columns {tech} -show tree -height 4 -selectmode browse
     $frtv.tv column #0 -stretch 1 -width 150
     $frtv.tv column tech -stretch 0 -width 120 -anchor e
 
@@ -772,8 +783,8 @@ proc ::simmerblau::simmerblau_gui {} {
         }
     }
 
-    set pa [labelframe $f.apply -text "Apply to target" -padx $framepad -pady $framepad]
-    pack $pa -fill x -pady $pad
+    set pa [labelframe $f.apply -text "Apply to target" -padx $framepad -pady 3]
+    pack $pa -fill x -pady 1
 
     set frt [frame $pa.frt]
     radiobutton $frt.r1 -text "Color IDs (0-32)" -value "0-32" -variable ::simmerblau::targetRange
@@ -789,11 +800,9 @@ proc ::simmerblau::simmerblau_gui {} {
     foreach var {cur_r cur_g cur_b} { trace add variable ::simmerblau::$var write "::simmerblau::colorinator_update_from_sliders" }
 
     # Byline at the bottom.
-    label $f.byline -text "By Marieke Westendorp & Aster Kovács at the University of Groningen.\n\
-        Color generation based on RampenSau by David Aerne (meodai)\n\
-        and the Colorinator in the PECOC project by Tsjerk Wassenaar." \
+    label $f.byline -text "By Marieke Westendorp & Aster Kovács at the University of Groningen." \
         -font "$font 7 italic" -fg $fg_subtle -wraplength $wraplength -justify center
-    pack $f.byline -side bottom -fill x -pady {10 0}
+    pack $f.byline -side bottom -fill x -pady {5 0}
 
     ::simmerblau::refresh_library
     if {[file exists [file join [::simmerblau::get_storage_path] "default.json"]]} { catch { ::simmerblau::load_palette "default" } }
