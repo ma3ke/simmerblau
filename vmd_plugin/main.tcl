@@ -735,6 +735,7 @@ proc ::simmerblau::simmerblau_gui {} {
 
     set pl [labelframe $f.lib -text "Palette library" -padx $framepad -pady $framepad]
     pack $pl -fill x -pady $pad
+
     label $pl.desc -text "Palettes will be loaded from the .simmerblau directory if present. \
         Globally accessible palettes are stored in ~/.config/simmerblau." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
@@ -750,25 +751,26 @@ proc ::simmerblau::simmerblau_gui {} {
     scrollbar $frtv.vsb -orient vertical -command [list $frtv.tv yview]
     $frtv.tv configure -yscrollcommand [list $frtv.vsb set]
 
+    # Vertical button stack on the right.
+    set frl [frame $frtv.frl]
+    button $frl.save -text "Save" -width 8 -command {
+        set name [::simmerblau::tk_inputDialog "Save Palette" "Enter name:"]
+        if {$name != ""} { ::simmerblau::save_palette $name }
+    }
+    button $frl.refresh -text "Refresh" -width 8 -command ::simmerblau::refresh_library
+    pack $frl.save $frl.refresh -side top -pady 2 -fill x
+
+    pack $frl -side right -padx "5 0" -anchor n
     pack $frtv.vsb -side right -fill y
     pack $frtv.tv -side left -fill x -expand 1
 
     bind $frtv.tv <<TreeviewSelect>> {
+
         set sel [%W selection]
         if {$sel != ""} {
             ::simmerblau::load_palette [%W item $sel -text]
         }
     }
-
-    set frl [frame $pl.frl]
-    button $frl.save -text "Save current" -command {
-        set name [::simmerblau::tk_inputDialog "Save Palette" "Enter name:"]
-        if {$name != ""} { ::simmerblau::save_palette $name }
-    }
-    button $frl.refresh -text "Refresh" -command ::simmerblau::refresh_library
-    pack $frl.save $frl.refresh -side left -padx 2
-    pack $frl -fill x
-
 
     set pa [labelframe $f.apply -text "Apply to target" -padx $framepad -pady $framepad]
     pack $pa -fill x -pady $pad
