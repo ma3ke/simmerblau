@@ -78,15 +78,50 @@ proc ::simmerblau::set_current_state {state} {
     ::simmerblau::update_preview
 }
 
+proc ::simmerblau::bring_to_colorinator {} {
+    variable technique
+    if {$technique != "rampensau"} return
+    
+    # Generate the current ramp from RampenSau.
+    set ramp [::simmerblau::generate_ramp 5] ;# We'll use 5 points as a baseline (0, 0.25, 0.5, 0.75, 1.0)
+    set new_stops {}
+    set n [llength $ramp]
+    for {set i 0} {$i < $n} {incr i} {
+        set pos [expr {double($i) / ($n - 1)}]
+        set rgb [lindex $ramp $i]
+        lappend new_stops [list $pos $rgb]
+    }
+    
+    set ::simmerblau::colorinator_stops $new_stops
+    set ::simmerblau::technique "colorinator"
+    
+    # Switch the tab in the UI.
+    variable w
+    if {[winfo exists $w.f.nb]} {
+        set nb $w.f.nb
+        foreach tab [$nb tabs] {
+            if {[string tolower [$nb tab $tab -text]] == "colorinator"} {
+                $nb select $tab
+                break
+            }
+        }
+    }
+}
+
 proc ::simmerblau::update_button_states {} {
     variable w
     variable undoStack
     variable redoStack
+    variable technique
     if {![winfo exists $w]} return
     set u_btn $w.f.frh.undo
     set r_btn $w.f.frh.redo
+    set t_btn $w.f.frh.to_col
     if {[winfo exists $u_btn]} { if {[llength $undoStack] > 1} { $u_btn configure -state normal } else { $u_btn configure -state disabled } }
     if {[winfo exists $r_btn]} { if {[llength $redoStack] > 0} { $r_btn configure -state normal } else { $r_btn configure -state disabled } }
+    if {[winfo exists $t_btn]} {
+        if {$technique == "rampensau"} { $t_btn configure -state normal } else { $t_btn configure -state disabled }
+    }
 }
 
 proc ::simmerblau::push_undo_snapshot {} {
@@ -572,12 +607,14 @@ proc ::simmerblau::simmerblau_gui {} {
     grid columnconfigure $w 1 -weight 1
     grid rowconfigure $w 0 -weight 1
 
-    # Header with Undo/Redo buttons.
+    # Header with Undo/Redo and Technique transfer buttons.
     set frh [frame $f.frh]
     pack $frh -fill x -pady "0 $pad"
     button $frh.undo -text "Undo" -command ::simmerblau::trigger_undo
     button $frh.redo -text "Redo" -command ::simmerblau::trigger_redo
+    button $frh.to_col -text "Bring to Colorinator" -command ::simmerblau::bring_to_colorinator
     pack $frh.undo $frh.redo -side left -padx 2
+    pack $frh.to_col -side right -padx 2
 
     set nb [ttk::notebook $f.nb]
     pack $nb -fill both -expand 1 -pady $pad
