@@ -83,8 +83,8 @@ proc ::simmerblau::update_button_states {} {
     variable undoStack
     variable redoStack
     if {![winfo exists $w]} return
-    set u_btn $w.f.apply.frh.undo
-    set r_btn $w.f.apply.frh.redo
+    set u_btn $w.f.frh.undo
+    set r_btn $w.f.frh.redo
     if {[winfo exists $u_btn]} { if {[llength $undoStack] > 1} { $u_btn configure -state normal } else { $u_btn configure -state disabled } }
     if {[winfo exists $r_btn]} { if {[llength $redoStack] > 0} { $r_btn configure -state normal } else { $r_btn configure -state disabled } }
 }
@@ -242,6 +242,7 @@ proc ::simmerblau::refresh_library {} {
         set id [$tv insert {} end -text [file rootname $f] -values [list $technique]]
         $tv item $id -tags [string tolower $technique]
     }
+    ::simmerblau::update_library_colors
 }
 
 proc ::simmerblau::create_control {parent label var from to {res 0.01}} {
@@ -265,9 +266,31 @@ proc ::simmerblau::step_value {var res dir from to} {
     if {$res < 1} { set ::simmerblau::$var [format "%.2f" $newVal] } else { set ::simmerblau::$var [expr {int($newVal)}] }
 }
 
+proc ::simmerblau::update_library_colors {} {
+    variable w; if {![winfo exists $w]} return
+    set tv $w.f.lib.frtv.tv
+    if {![winfo exists $tv]} return
+    variable technique
+    set current [string tolower $technique]
+    
+    if {$current == "rampensau"} {
+        $tv tag configure rampensau -foreground ""
+        $tv tag configure colorinator -foreground gray60
+    } elseif {$current == "colorinator"} {
+        $tv tag configure rampensau -foreground gray60
+        $tv tag configure colorinator -foreground ""
+    } else {
+        $tv tag configure rampensau -foreground ""
+        $tv tag configure colorinator -foreground ""
+    }
+    $tv tag configure unknown -foreground gray60
+}
+
 proc ::simmerblau::on_tab_changed {nb} {
     variable technique
     set technique [string tolower [$nb tab current -text]]
+    ::simmerblau::update_library_colors
+    ::simmerblau::update_preview
 }
 
 # This is the most cursed mess you will ever see. I am so sorry.
@@ -549,6 +572,13 @@ proc ::simmerblau::simmerblau_gui {} {
     grid columnconfigure $w 1 -weight 1
     grid rowconfigure $w 0 -weight 1
 
+    # Header with Undo/Redo buttons.
+    set frh [frame $f.frh]
+    pack $frh -fill x -pady "0 $pad"
+    button $frh.undo -text "Undo" -command ::simmerblau::trigger_undo
+    button $frh.redo -text "Redo" -command ::simmerblau::trigger_redo
+    pack $frh.undo $frh.redo -side left -padx 2
+
     set nb [ttk::notebook $f.nb]
     pack $nb -fill both -expand 1 -pady $pad
     bind $nb <<NotebookTabChanged>> { ::simmerblau::on_tab_changed %W }
@@ -637,7 +667,9 @@ proc ::simmerblau::simmerblau_gui {} {
     label $frh.l -text "Scheme" -width $::simmerblau::label_width -anchor w
     set h_opts [list "none" "complementary" "triadic" "split" "tetradic" "analogous"]
     eval [list tk_optionMenu $frh.m ::simmerblau::harmony] $h_opts
+    button $frh.rand -text "Randomize palette" -command ::simmerblau::randomize
     pack $frh.l $frh.m -side left
+    pack $frh.rand -side right
     pack $frh -fill x -pady $pad
     ::simmerblau::create_control $phue "Start" hStart 0 360 1
     ::simmerblau::create_control $phue "Cycles" hCycles -2 2
@@ -693,10 +725,6 @@ proc ::simmerblau::simmerblau_gui {} {
     pack $frtv.vsb -side right -fill y
     pack $frtv.tv -side left -fill x -expand 1
     
-    $frtv.tv tag configure rampensau -foreground gray50
-    $frtv.tv tag configure colorinator -foreground gray50
-    $frtv.tv tag configure unknown -foreground gray50
-
     bind $frtv.tv <<TreeviewSelect>> {
         set sel [%W selection]
         if {$sel != ""} {
@@ -710,8 +738,7 @@ proc ::simmerblau::simmerblau_gui {} {
         if {$name != ""} { ::simmerblau::save_palette $name }
     }
     button $frl.refresh -text "Refresh" -command ::simmerblau::refresh_library
-    button $frl.rand -text "Randomize palette" -command ::simmerblau::randomize
-    pack $frl.save $frl.refresh $frl.rand -side left -expand 1
+    pack $frl.save $frl.refresh -side left -padx 2
     pack $frl -fill x
 
 
@@ -722,16 +749,10 @@ proc ::simmerblau::simmerblau_gui {} {
     radiobutton $frt.r1 -text "Color IDs (0-32)" -value "0-32" -variable ::simmerblau::targetRange
     radiobutton $frt.r2 -text "Color scale" -value "Scale" -variable ::simmerblau::targetRange
     checkbutton $frt.live -text "Live preview" -variable ::simmerblau::livePreview
-    pack $frt.r1 $frt.r2 $frt.live -side left -expand 1
+    pack $frt.r1 $frt.r2 $frt.live -side left -padx 5
     pack $frt -fill x -pady $pad
     button $pa.btn -text "Apply to VMD" -font "$font 10 bold" -command ::simmerblau::apply_ramp
     pack $pa.btn -fill x -pady $pad
-
-    set frh [frame $pa.frh]
-    button $frh.undo -text "Undo" -command ::simmerblau::trigger_undo
-    button $frh.redo -text "Redo" -command ::simmerblau::trigger_redo
-    pack $frh.undo $frh.redo -side left -expand 1
-    pack $frh -fill x -pady $pad
     foreach var {technique total colorinator_map colorinator_stops selected_stop_idx hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent targetRange livePreview useHarvey colorSpace harmony} { trace add variable ::simmerblau::$var write "::simmerblau::trace_update" }
     trace add variable ::simmerblau::colorinator_map write "::simmerblau::colorinator_load_preset"
     foreach var {cur_r cur_g cur_b} { trace add variable ::simmerblau::$var write "::simmerblau::colorinator_update_from_sliders" }
@@ -774,11 +795,6 @@ proc ::simmerblau::tk_inputDialog {title msg} {
 proc ::simmerblau::randomize {} {
     set ::simmerblau::hStart [format "%.2f" [expr {rand() * 360.0}]]
     set ::simmerblau::hCycles [format "%.2f" [expr {rand() * 2.0 - 1.0}]]
-    set ::simmerblau::sMin [format "%.2f" [expr {rand() * 0.5}]]
-    set ::simmerblau::sMax [format "%.2f" [expr {0.5 + rand() * 0.5}]]
-    set ::simmerblau::lMin [format "%.2f" [expr {rand() * 0.3}]]
-    set ::simmerblau::lMax [format "%.2f" [expr {0.7 + rand() * 0.3}]]
-    set ::simmerblau::curveAccent [format "%.2f" [expr {rand() * 2.0}]]
 }
 
 proc ::simmerblau::trace_update {args} {
