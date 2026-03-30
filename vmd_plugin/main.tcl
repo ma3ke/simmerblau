@@ -81,7 +81,7 @@ proc ::simmerblau::set_current_state {state} {
 proc ::simmerblau::bring_to_colorinator {} {
     variable technique
     if {$technique != "rampensau"} return
-    
+
     # Generate the current ramp from RampenSau.
     set ramp [::simmerblau::generate_ramp 5] ;# We'll use 5 points as a baseline (0, 0.25, 0.5, 0.75, 1.0)
     set new_stops {}
@@ -91,10 +91,10 @@ proc ::simmerblau::bring_to_colorinator {} {
         set rgb [lindex $ramp $i]
         lappend new_stops [list $pos $rgb]
     }
-    
+
     set ::simmerblau::colorinator_stops $new_stops
     set ::simmerblau::technique "colorinator"
-    
+
     # Switch the tab in the UI.
     variable w
     if {[winfo exists $w.f.nb]} {
@@ -274,7 +274,7 @@ proc ::simmerblau::refresh_library {} {
                 if {$tech == "colorinator"} { set technique "Colorinator" }
             }
         }]} { catch {close $fp} }
-        
+
         set id [$tv insert {} end -text [file rootname $f] -values [list $technique]]
         $tv item $id -tags [string tolower $technique]
     }
@@ -308,7 +308,7 @@ proc ::simmerblau::update_library_colors {} {
     if {![winfo exists $tv]} return
     variable technique
     set current [string tolower $technique]
-    
+
     if {$current == "rampensau"} {
         $tv tag configure rampensau -foreground ""
         $tv tag configure colorinator -foreground gray60
@@ -739,20 +739,20 @@ proc ::simmerblau::simmerblau_gui {} {
         Globally accessible palettes are stored in ~/.config/simmerblau." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $pl.desc -anchor w -pady "0 $pad"
-    
+
     set frtv [frame $pl.frtv]
     pack $frtv -fill x -pady $pad
-    
+
     ttk::treeview $frtv.tv -columns {tech} -show tree -height 5 -selectmode browse
     $frtv.tv column #0 -stretch 1 -width 150
     $frtv.tv column tech -stretch 0 -width 120 -anchor e
-    
+
     scrollbar $frtv.vsb -orient vertical -command [list $frtv.tv yview]
     $frtv.tv configure -yscrollcommand [list $frtv.vsb set]
-    
+
     pack $frtv.vsb -side right -fill y
     pack $frtv.tv -side left -fill x -expand 1
-    
+
     bind $frtv.tv <<TreeviewSelect>> {
         set sel [%W selection]
         if {$sel != ""} {
@@ -778,7 +778,7 @@ proc ::simmerblau::simmerblau_gui {} {
     radiobutton $frt.r2 -text "Color scale" -value "Scale" -variable ::simmerblau::targetRange
     checkbutton $frt.live -text "Live preview" -variable ::simmerblau::livePreview
     button $frt.btn -text "Apply to VMD" -font "$font 9 bold" -command ::simmerblau::apply_ramp -pady 2
-    
+
     pack $frt.r1 $frt.r2 $frt.live -side left -padx 5
     pack $frt.btn -side right -padx 5
     pack $frt -fill x -pady 2
