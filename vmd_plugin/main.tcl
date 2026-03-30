@@ -558,7 +558,7 @@ proc ::simmerblau::simmerblau_gui {} {
     set w [toplevel ".simmerblau"]
     wm title $w $::simmerblau::plugin_title
     wm resizable $w 1 1
-    wm minsize $w 600 950
+    wm minsize $w 600 850
 
     set cv [canvas $w.cv -width 100 -height 700 -bg black -highlightthickness 0]
     grid $cv -row 0 -column 0 -sticky nsew -padx $pad -pady $pad
