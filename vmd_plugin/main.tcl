@@ -626,7 +626,7 @@ proc ::simmerblau::simmerblau_gui {} {
     set frp [frame $nb.colorinator -padx $framepad -pady $framepad]
     $nb add $frp -text "Colorinator"
 
-    set pce [labelframe $frp.editor -text "Stop Color" -padx $framepad -pady $framepad]
+    set pce [labelframe $frp.editor -text "Stop color" -padx $framepad -pady $framepad]
     pack $pce -fill x -pady $pad
     label $pce.desc -text "Adjust RGB values of the selected stop." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
@@ -637,7 +637,7 @@ proc ::simmerblau::simmerblau_gui {} {
     ::simmerblau::create_control $pce "Blue" cur_b 0 1
     foreach child [winfo children $pce] { if {$child != "$pce.desc"} { pack $child -fill x -expand 1 } }
 
-    set pms [labelframe $frp.stops -text "Custom Stops" -padx $framepad -pady $framepad]
+    set pms [labelframe $frp.stops -text "Custom stops" -padx $framepad -pady $framepad]
     pack $pms -fill both -expand 1 -pady $pad
 
     label $pms.desc -text "Flexible color mapping with adjustable control points. \
