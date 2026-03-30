@@ -221,9 +221,27 @@ proc ::simmerblau::load_palette {name} {
 
 proc ::simmerblau::refresh_library {} {
     variable w; if {![winfo exists $w]} return
-    set lb $w.f.lib.lb; $lb delete 0 end
+    set tv $w.f.lib.frtv.tv
+    if {![winfo exists $tv]} return
+    $tv delete [$tv children ""]
     set path [::simmerblau::get_storage_path]
-    foreach f [glob -nocomplain -directory $path -tails *.json] { $lb insert end [file rootname $f] }
+    foreach f [lsort -dictionary [glob -nocomplain -directory $path -tails *.json]] {
+        set filename [file join $path $f]
+        set technique "Unknown"
+        # Peek into the file to find the technique.
+        if {[catch {
+            set fp [open $filename r]
+            set content [read $fp 2000]
+            close $fp
+            if {[regexp {"technique"\s*:\s*"([^"]+)"} $content -> tech]} {
+                if {$tech == "rampensau"} { set technique "RampenSau" }
+                if {$tech == "colorinator"} { set technique "Colorinator" }
+            }
+        }]} { catch {close $fp} }
+        
+        set id [$tv insert {} end -text [file rootname $f] -values [list $technique]]
+        $tv item $id -tags [string tolower $technique]
+    }
 }
 
 proc ::simmerblau::create_control {parent label var from to {res 0.01}} {
@@ -661,9 +679,30 @@ proc ::simmerblau::simmerblau_gui {} {
         Globally accessible palettes are stored in ~/.config/simmerblau." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $pl.desc -anchor w -pady "0 $pad"
-    listbox $pl.lb -height 5 -exportselection 0
-    pack $pl.lb -fill x -pady $pad
-    bind $pl.lb <<ListboxSelect>> { if {[%W curselection] != ""} { ::simmerblau::load_palette [%W get [%W curselection]] } }
+    
+    set frtv [frame $pl.frtv]
+    pack $frtv -fill x -pady $pad
+    
+    ttk::treeview $frtv.tv -columns {tech} -show tree -height 5 -selectmode browse
+    $frtv.tv column #0 -stretch 1 -width 150
+    $frtv.tv column tech -stretch 0 -width 120 -anchor e
+    
+    scrollbar $frtv.vsb -orient vertical -command [list $frtv.tv yview]
+    $frtv.tv configure -yscrollcommand [list $frtv.vsb set]
+    
+    pack $frtv.vsb -side right -fill y
+    pack $frtv.tv -side left -fill x -expand 1
+    
+    $frtv.tv tag configure rampensau -foreground gray50
+    $frtv.tv tag configure colorinator -foreground gray50
+    $frtv.tv tag configure unknown -foreground gray50
+
+    bind $frtv.tv <<TreeviewSelect>> {
+        set sel [%W selection]
+        if {$sel != ""} {
+            ::simmerblau::load_palette [%W item $sel -text]
+        }
+    }
 
     set frl [frame $pl.frl]
     button $frl.save -text "Save current" -command {
