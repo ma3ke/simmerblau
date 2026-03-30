@@ -41,6 +41,7 @@ namespace eval ::simmerblau:: {
     variable cur_r 0.0
     variable cur_g 0.0
     variable cur_b 0.0
+    variable dragging_stop_idx -1
     set plugin_title "Simmerblau Colors"
     set label_width 14
 }
@@ -52,7 +53,7 @@ proc simmerblau_tk_cb {} {
 
 proc ::simmerblau::get_current_state {} {
     set state {}
-    foreach var {technique total colorinator_map pecoc_stops hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent useHarvey colorSpace harmony} {
+    foreach var {technique total colorinator_map colorinator_stops selected_stop_idx hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent useHarvey colorSpace harmony} {
         dict set state $var [set ::simmerblau::$var]
     }
     return $state
@@ -72,7 +73,7 @@ proc ::simmerblau::set_current_state {state} {
     }
     # Update the Colorinator stop editor if it exists.
     if {[winfo exists $w.f.nb.colorinator]} {
-        ::simmerblau::pecoc_refresh_editor
+        ::simmerblau::colorinator_select_stop $::simmerblau::selected_stop_idx 1
     }
     ::simmerblau::update_preview
 }
@@ -249,7 +250,6 @@ proc ::simmerblau::step_value {var res dir from to} {
 proc ::simmerblau::on_tab_changed {nb} {
     variable technique
     set technique [string tolower [$nb tab current -text]]
-    ::simmerblau::update_preview
 }
 
 # This is the most cursed mess you will ever see. I am so sorry.
@@ -351,7 +351,8 @@ proc ::simmerblau::colorinator_refresh_editor {} {
 
         label $row.l -text "Stop [expr {$i+1}]" -width 6 -bg $bg
         entry $row.e -width 6
-        $row.e insert 0 $pos
+        # Values are rounded to three decimal places for display.
+        $row.e insert 0 [format "%.3f" $pos]
 
         # Bindings:
         # Return/FocusOut: commit change and re-sort.
@@ -521,7 +522,9 @@ proc ::simmerblau::simmerblau_gui {} {
     set cv [canvas $w.cv -width 100 -height 700 -bg black -highlightthickness 0]
     grid $cv -row 0 -column 0 -sticky nsew -padx $pad -pady $pad
     bind $cv <Configure> { ::simmerblau::update_preview }
-    bind $cv <Button-1> { ::simmerblau::on_canvas_click %x %y }
+    bind $cv <Button-1> { ::simmerblau::on_mouse_down %x %y }
+    bind $cv <B1-Motion> { ::simmerblau::on_mouse_move %x %y }
+    bind $cv <ButtonRelease-1> { ::simmerblau::on_mouse_up %x %y }
 
     set f [frame $w.f -padx $framepad -pady $framepad]
     grid $f -row 0 -column 1 -sticky nsew
@@ -846,6 +849,111 @@ proc ::simmerblau::update_preview {args} {
             $canvas create oval [expr {$cx-$r}] [expr {$cy-$r}] [expr {$cx+$r}] [expr {$cy+$r}] -fill $dot_fill -outline ""
         }
     }
+
+    # Draw Colorinator stop markers if active.
+    variable technique
+    if {$technique == "colorinator"} {
+        variable colorinator_stops
+        set i 0
+        foreach stop $colorinator_stops {
+            lassign $stop pos rgb
+            set py [expr {$pos * $height}]
+            set px [expr {$width * 0.75}]
+            set r 4
+
+            # A contrast dot is drawn for visibility.
+            set dot_fill "white"
+            set lum [expr {0.2126*[lindex $rgb 0] + 0.7152*[lindex $rgb 1] + 0.0722*[lindex $rgb 2]}]
+            if {$lum > 0.5} { set dot_fill "black" }
+
+            $canvas create oval [expr {$px-$r}] [expr {$py-$r}] [expr {$px+$r}] [expr {$py+$r}] -fill $dot_fill -outline "#888888" -tags [list stop_marker stop_$i]
+
+            # A contrasting ring highlights the selected stop.
+            variable selected_stop_idx
+            if {$i == $selected_stop_idx} {
+                set r2 [expr {$r + 3}]
+                $canvas create oval [expr {$px-$r2}] [expr {$py-$r2}] [expr {$px+$r2}] [expr {$py+$r2}] -outline $dot_fill -width 2 -tags selection_ring
+            }
+            incr i
+        }
+    }
+}
+
+proc ::simmerblau::on_mouse_down {x y} {
+    variable w
+    variable dragging_stop_idx
+    set canvas $w.cv
+
+    # First, check if a stop marker was clicked.
+    set items [$canvas find overlapping [expr {$x-3}] [expr {$y-3}] [expr {$x+3}] [expr {$y+3}]]
+    foreach item $items {
+        set tags [$canvas gettags $item]
+        if {[lsearch $tags "stop_marker"] != -1} {
+            foreach tag $tags {
+                if {[scan $tag "stop_%d" idx] == 1} {
+                    set dragging_stop_idx $idx
+                    ::simmerblau::colorinator_select_stop $idx
+                    return
+                }
+            }
+        }
+    }
+
+    # If no marker was clicked, fall back to the locking logic for the palette.
+    ::simmerblau::on_canvas_click $x $y
+}
+
+proc ::simmerblau::on_mouse_move {x y} {
+    variable dragging_stop_idx
+    if {$dragging_stop_idx < 0} return
+
+    variable w
+    set canvas $w.cv
+    set height [winfo height $canvas]
+    if {$height <= 1} { set height 700 }
+
+    # Calculate the normalized position.
+    set pos [expr {double($y) / $height}]
+    if {$pos < 0.0} { set pos 0.0 }
+    if {$pos > 1.0} { set pos 1.0 }
+
+    # Update the stop position during the drag.
+    lset ::simmerblau::colorinator_stops $dragging_stop_idx 0 $pos
+    ::simmerblau::update_preview
+}
+
+proc ::simmerblau::on_mouse_up {x y} {
+    variable dragging_stop_idx
+    if {$dragging_stop_idx < 0} return
+
+    # Commit the final position and sort.
+    set idx $dragging_stop_idx
+    set dragging_stop_idx -1
+
+    variable w
+    set canvas $w.cv
+    set height [winfo height $canvas]
+    if {$height <= 1} { set height 700 }
+    set pos [expr {double($y) / $height}]
+    if {$pos < 0.0} { set pos 0.0 }
+    if {$pos > 1.0} { set pos 1.0 }
+
+    # Find the new index of the stop after sorting.
+    set old_rgb [lindex [lindex $::simmerblau::colorinator_stops $idx] 1]
+    lset ::simmerblau::colorinator_stops $idx 0 $pos
+    set ::simmerblau::colorinator_stops [lsort -real -index 0 $::simmerblau::colorinator_stops]
+
+    set new_idx 0
+    foreach stop $::simmerblau::colorinator_stops {
+        if {abs([lindex $stop 0] - $pos) < 0.0001 && [lindex $stop 1] == $old_rgb} {
+            break
+        }
+        incr new_idx
+    }
+
+    # A full refresh is triggered upon release to update the editor rows.
+    ::simmerblau::colorinator_select_stop $new_idx 1
+    ::simmerblau::update_preview
 }
 
 proc ::simmerblau::apply_ramp {} {
