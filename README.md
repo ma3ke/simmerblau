@@ -3,9 +3,9 @@
 ![Simmerblau in use.](simmerblau.jpg)
 
 _Simmerblau_ lets you generate pleasing color ramps in [VMD][vmd]. It is inspired by and based on
-the fantastic [RampenSau][rampensau]. To learn about the technical details behind the color
-generation, please look at that project. _Simmerblau_ is simply a Tcl port of that color generation
-logic with a user interface for VMD.
+the fantastic [_RampenSau_][rampensau] and the _Colorinator_ module in [PECOC][pecoc]. To learn
+about the technical details behind the color generation, please look at those projects. _Simmerblau_
+is simply a Tcl port of the color generation techniques with a user interface for VMD.
 
 ## Installation
 
@@ -38,7 +38,13 @@ while randomizing or adjusting the rest of the parameters.
 ## Credits
 
 _Simmerblau_ was developed by Marieke Westendorp & Aster Kovács, 2026.
-The color generation is based on [RampenSau][rampensau] by David Aerne (@meodai) et al.
+The color generation is based on [_RampenSau_][rampensau] by David Aerne (@meodai) et al. and
+_Colorinator_ in the [PECOC][pecoc] project by Tsjerk A. Wassenaar.
+
+> Wassenaar, T.A. (2024). A New Look at Correlations: Pattern-Encoded
+> Color-Ordered Correlation (PECOC) and Cello Plots for Multivariate
+> Data Visualization. <https://github.com/Tsjerk/cello>
 
 [vmd]: https://www.ks.uiuc.edu/Research/vmd
 [rampensau]: https://github.com/meodai/rampensau
+[pecoc]: https://github.com/Tsjerk/pecoc
