@@ -581,7 +581,7 @@ proc ::simmerblau::simmerblau_gui {} {
     set fg_subtle gray50
     set pad 5
     set framepad 10
-    set wraplength 450
+    set wraplength 400
 
     variable w
 
@@ -735,7 +735,7 @@ proc ::simmerblau::simmerblau_gui {} {
 
     set pl [labelframe $f.lib -text "Palette library" -padx $framepad -pady $framepad]
     pack $pl -fill x -pady $pad
-    label $pl.desc -text "If you have a .simmerblau directory in your project, palettes will be loaded from there. \
+    label $pl.desc -text "Palettes will be loaded from the .simmerblau directory if present. \
         Globally accessible palettes are stored in ~/.config/simmerblau." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $pl.desc -anchor w -pady "0 $pad"
