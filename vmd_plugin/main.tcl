@@ -7,12 +7,13 @@
 
 package provide simmerblau 1.0
 
-set dir [file dirname [info script]]
-source [file join $dir rampensau.tcl]
+package require simmerblau_logic 1.0
+package require simmerblau_rampensau 1.0
 
 namespace eval ::simmerblau:: {
     variable w
     variable total 32
+    variable technique "rampensau"
     variable hStart 180.0
     variable hCycles 1.0
     variable hStartCenter 0.5
@@ -119,7 +120,7 @@ proc ::simmerblau::save_palette {name} {
     package require json::write
     set path [::simmerblau::get_storage_path]
     set filename [file join $path "${name}.json"]
-    set ramp [::simmerblau::logic::generate_ramp \
+    set ramp [::simmerblau::logic::rampensau::generate_ramp \
         -total $::simmerblau::total \
         -hStart $::simmerblau::hStart \
         -hCycles $::simmerblau::hCycles \
@@ -391,7 +392,7 @@ proc ::simmerblau::on_canvas_click {x y} {
         dict unset lockedColors $idx
     } else {
         # Lock current projected color.
-        set ramp [::simmerblau::logic::generate_ramp \
+        set ramp [::simmerblau::logic::rampensau::generate_ramp \
             -total $total \
             -hStart $::simmerblau::hStart \
             -hCycles $::simmerblau::hCycles \
@@ -433,7 +434,7 @@ proc ::simmerblau::update_preview {args} {
     # Visual resolution for preview.
     set num_scale 256
     if {[catch {
-        set scale_ramp [::simmerblau::logic::generate_ramp \
+        set scale_ramp [::simmerblau::logic::rampensau::generate_ramp \
             -total $num_scale \
             -hStart $::simmerblau::hStart \
             -hCycles $::simmerblau::hCycles \
@@ -461,7 +462,7 @@ proc ::simmerblau::update_preview {args} {
 
     # Discrete palette for the Color IDs.
     set num_palette 33
-    set p_ramp [::simmerblau::logic::generate_ramp \
+    set p_ramp [::simmerblau::logic::rampensau::generate_ramp \
         -total $::simmerblau::total \
         -hStart $::simmerblau::hStart \
         -hCycles $::simmerblau::hCycles \
@@ -514,7 +515,7 @@ proc ::simmerblau::update_preview {args} {
 proc ::simmerblau::apply_ramp {} {
     variable targetRange
     variable total
-    set ramp [::simmerblau::logic::generate_ramp \
+    set ramp [::simmerblau::logic::rampensau::generate_ramp \
         -total $::simmerblau::total \
         -hStart $::simmerblau::hStart \
         -hCycles $::simmerblau::hCycles \
@@ -552,7 +553,7 @@ proc ::simmerblau::apply_ramp {} {
         set max_id [colorinfo max]
         set num_colors [expr {$max_id - $start_id}]
         if {$num_colors <= 0} return
-        set scale_ramp [::simmerblau::logic::generate_ramp -total $num_colors -hStart $::simmerblau::hStart -hCycles $::simmerblau::hCycles -hStartCenter $::simmerblau::hStartCenter -sRange [list $::simmerblau::sMin $::simmerblau::sMax] -lRange [list $::simmerblau::lMin $::simmerblau::lMax] -curveMethod $::simmerblau::curveMethod -curveAccent $::simmerblau::curveAccent -useHarvey $::simmerblau::useHarvey -harmony $::simmerblau::harmony]
+        set scale_ramp [::simmerblau::logic::rampensau::generate_ramp -total $num_colors -hStart $::simmerblau::hStart -hCycles $::simmerblau::hCycles -hStartCenter $::simmerblau::hStartCenter -sRange [list $::simmerblau::sMin $::simmerblau::sMax] -lRange [list $::simmerblau::lMin $::simmerblau::lMax] -curveMethod $::simmerblau::curveMethod -curveAccent $::simmerblau::curveAccent -useHarvey $::simmerblau::useHarvey -harmony $::simmerblau::harmony]
         set i $start_id
         foreach color $scale_ramp {
             if {$::simmerblau::colorSpace == "OKLCH"} { set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]] } else { set rgb [::simmerblau::logic::hsl2rgb {*}$color] }
