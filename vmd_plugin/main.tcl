@@ -740,10 +740,11 @@ proc ::simmerblau::simmerblau_gui {} {
     radiobutton $frt.r1 -text "Color IDs (0-32)" -value "0-32" -variable ::simmerblau::targetRange
     radiobutton $frt.r2 -text "Color scale" -value "Scale" -variable ::simmerblau::targetRange
     checkbutton $frt.live -text "Live preview" -variable ::simmerblau::livePreview
+    button $frt.btn -text "Apply to VMD" -font "$font 9 bold" -command ::simmerblau::apply_ramp -pady 2
+    
     pack $frt.r1 $frt.r2 $frt.live -side left -padx 5
-    pack $frt -fill x -pady $pad
-    button $pa.btn -text "Apply to VMD" -font "$font 10 bold" -command ::simmerblau::apply_ramp
-    pack $pa.btn -fill x -pady $pad
+    pack $frt.btn -side right -padx 5
+    pack $frt -fill x -pady 2
     foreach var {technique total colorinator_map colorinator_stops selected_stop_idx hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent targetRange livePreview useHarvey colorSpace harmony} { trace add variable ::simmerblau::$var write "::simmerblau::trace_update" }
     trace add variable ::simmerblau::colorinator_map write "::simmerblau::colorinator_load_preset"
     foreach var {cur_r cur_g cur_b} { trace add variable ::simmerblau::$var write "::simmerblau::colorinator_update_from_sliders" }
