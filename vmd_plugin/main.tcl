@@ -106,6 +106,7 @@ proc ::simmerblau::bring_to_colorinator {} {
             }
         }
     }
+    ::simmerblau::colorinator_select_stop 0 1
 }
 
 proc ::simmerblau::update_button_states {} {
@@ -334,7 +335,7 @@ proc ::simmerblau::colorinator_load_preset {args} {
     if {![info exists ::simmerblau::logic::colorinator::colormaps($colorinator_map)]} return
     set stops [set ::simmerblau::logic::colorinator::colormaps($colorinator_map)]
     set ::simmerblau::colorinator_stops $stops
-    ::simmerblau::colorinator_select_stop 0
+    ::simmerblau::colorinator_select_stop 0 1
     ::simmerblau::update_preview
 }
 
@@ -570,8 +571,7 @@ proc ::simmerblau::colorinator_snap_spacing {type} {
     for {set i 0} {$i < $n} {incr i} {
         lset ::simmerblau::colorinator_stops $i 0 [lindex $positions $i]
     }
-    variable selected_stop_idx
-    ::simmerblau::colorinator_select_stop $selected_stop_idx 1
+    ::simmerblau::colorinator_select_stop 0 1
     ::simmerblau::update_preview
 }
 
