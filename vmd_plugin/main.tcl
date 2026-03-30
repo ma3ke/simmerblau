@@ -114,14 +114,16 @@ proc ::simmerblau::get_storage_path {} {
     return $path
 }
 
-proc ::simmerblau::save_palette {name} {
-    if {$name == ""} return
-    variable version
-    package require json::write
-    set path [::simmerblau::get_storage_path]
-    set filename [file join $path "${name}.json"]
-    set ramp [::simmerblau::logic::rampensau::generate_ramp \
-        -total $::simmerblau::total \
+proc ::simmerblau::generate_ramp {total {extra_params ""}} {
+    variable technique
+    if {$extra_params == ""} {
+        set extra_params [::simmerblau::get_${technique}_params]
+    }
+    return [::simmerblau::logic::${technique}::generate_ramp -total $total {*}$extra_params]
+}
+
+proc ::simmerblau::get_rampensau_params {} {
+    return [list \
         -hStart $::simmerblau::hStart \
         -hCycles $::simmerblau::hCycles \
         -hStartCenter $::simmerblau::hStartCenter \
@@ -130,8 +132,17 @@ proc ::simmerblau::save_palette {name} {
         -curveMethod $::simmerblau::curveMethod \
         -curveAccent $::simmerblau::curveAccent \
         -useHarvey $::simmerblau::useHarvey \
-        -harmony $::simmerblau::harmony
+        -harmony $::simmerblau::harmony \
     ]
+}
+
+proc ::simmerblau::save_palette {name} {
+    if {$name == ""} return
+    variable version
+    package require json::write
+    set path [::simmerblau::get_storage_path]
+    set filename [file join $path "${name}.json"]
+    set ramp [::simmerblau::generate_ramp $::simmerblau::total]
     set hex_items {}
     foreach color $ramp {
         if {$::simmerblau::colorSpace == "OKLCH"} { set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]] } else { set rgb [::simmerblau::logic::hsl2rgb {*}$color] }
@@ -392,17 +403,7 @@ proc ::simmerblau::on_canvas_click {x y} {
         dict unset lockedColors $idx
     } else {
         # Lock current projected color.
-        set ramp [::simmerblau::logic::rampensau::generate_ramp \
-            -total $total \
-            -hStart $::simmerblau::hStart \
-            -hCycles $::simmerblau::hCycles \
-            -hStartCenter $::simmerblau::hStartCenter \
-            -sRange [list $::simmerblau::sMin $::simmerblau::sMax] \
-            -lRange [list $::simmerblau::lMin $::simmerblau::lMax] \
-            -curveMethod $::simmerblau::curveMethod \
-            -curveAccent $::simmerblau::curveAccent \
-            -useHarvey $::simmerblau::useHarvey \
-            -harmony $::simmerblau::harmony]
+        set ramp [::simmerblau::generate_ramp $total]
 
         # Calculate color for this slot.
         set color_idx $idx
@@ -434,17 +435,7 @@ proc ::simmerblau::update_preview {args} {
     # Visual resolution for preview.
     set num_scale 256
     if {[catch {
-        set scale_ramp [::simmerblau::logic::rampensau::generate_ramp \
-            -total $num_scale \
-            -hStart $::simmerblau::hStart \
-            -hCycles $::simmerblau::hCycles \
-            -hStartCenter $::simmerblau::hStartCenter \
-            -sRange [list $::simmerblau::sMin $::simmerblau::sMax] \
-            -lRange [list $::simmerblau::lMin $::simmerblau::lMax] \
-            -curveMethod $::simmerblau::curveMethod \
-            -curveAccent $::simmerblau::curveAccent \
-            -useHarvey $::simmerblau::useHarvey \
-            -harmony $::simmerblau::harmony]
+        set scale_ramp [::simmerblau::generate_ramp $num_scale]
     } msg]} { return }
 
     set s_step [expr {double($height) / $num_scale}]
@@ -462,17 +453,7 @@ proc ::simmerblau::update_preview {args} {
 
     # Discrete palette for the Color IDs.
     set num_palette 33
-    set p_ramp [::simmerblau::logic::rampensau::generate_ramp \
-        -total $::simmerblau::total \
-        -hStart $::simmerblau::hStart \
-        -hCycles $::simmerblau::hCycles \
-        -hStartCenter $::simmerblau::hStartCenter \
-        -sRange [list $::simmerblau::sMin $::simmerblau::sMax] \
-        -lRange [list $::simmerblau::lMin $::simmerblau::lMax] \
-        -curveMethod $::simmerblau::curveMethod \
-        -curveAccent $::simmerblau::curveAccent \
-        -useHarvey $::simmerblau::useHarvey \
-        -harmony $::simmerblau::harmony]
+    set p_ramp [::simmerblau::generate_ramp $::simmerblau::total]
 
     set p_step [expr {double($height) / $num_palette}]
     for {set i 0} {$i < $num_palette} {incr i} {
@@ -515,18 +496,7 @@ proc ::simmerblau::update_preview {args} {
 proc ::simmerblau::apply_ramp {} {
     variable targetRange
     variable total
-    set ramp [::simmerblau::logic::rampensau::generate_ramp \
-        -total $::simmerblau::total \
-        -hStart $::simmerblau::hStart \
-        -hCycles $::simmerblau::hCycles \
-        -hStartCenter $::simmerblau::hStartCenter \
-        -sRange [list $::simmerblau::sMin $::simmerblau::sMax] \
-        -lRange [list $::simmerblau::lMin $::simmerblau::lMax] \
-        -curveMethod $::simmerblau::curveMethod \
-        -curveAccent $::simmerblau::curveAccent \
-        -useHarvey $::simmerblau::useHarvey \
-        -harmony $::simmerblau::harmony
-    ]
+    set ramp [::simmerblau::generate_ramp $::simmerblau::total]
     if {$targetRange == "0-32"} {
         set i 0
         foreach color $ramp {
@@ -553,7 +523,7 @@ proc ::simmerblau::apply_ramp {} {
         set max_id [colorinfo max]
         set num_colors [expr {$max_id - $start_id}]
         if {$num_colors <= 0} return
-        set scale_ramp [::simmerblau::logic::rampensau::generate_ramp -total $num_colors -hStart $::simmerblau::hStart -hCycles $::simmerblau::hCycles -hStartCenter $::simmerblau::hStartCenter -sRange [list $::simmerblau::sMin $::simmerblau::sMax] -lRange [list $::simmerblau::lMin $::simmerblau::lMax] -curveMethod $::simmerblau::curveMethod -curveAccent $::simmerblau::curveAccent -useHarvey $::simmerblau::useHarvey -harmony $::simmerblau::harmony]
+        set scale_ramp [::simmerblau::generate_ramp $num_colors]
         set i $start_id
         foreach color $scale_ramp {
             if {$::simmerblau::colorSpace == "OKLCH"} { set rgb [::simmerblau::logic::oklch2rgb [lindex $color 2] [expr {[lindex $color 1] * 0.4}] [lindex $color 0]] } else { set rgb [::simmerblau::logic::hsl2rgb {*}$color] }
