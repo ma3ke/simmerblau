@@ -160,7 +160,7 @@ proc ::simmerblau::trigger_redo {} {
 proc ::simmerblau::debounce_snapshot {} {
     variable snapshotAfterID
     if {$snapshotAfterID != ""} { after cancel $snapshotAfterID }
-    set snapshotAfterID [after 1000 ::simmerblau::push_undo_snapshot]
+    set snapshotAfterID [after 200 ::simmerblau::push_undo_snapshot]
 }
 
 proc ::simmerblau::get_storage_path {} {
