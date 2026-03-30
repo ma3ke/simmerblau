@@ -589,21 +589,6 @@ proc ::simmerblau::simmerblau_gui {} {
     set frp [frame $nb.colorinator -padx $framepad -pady $framepad]
     $nb add $frp -text "Colorinator"
 
-    # This section contains the controls for the Colorinator technique.
-    set pcm [labelframe $frp.cmap -text "Colormap" -padx $framepad -pady $framepad]
-    pack $pcm -fill x -pady $pad
-    label $pcm.desc -text "Flexible color mapping with adjustable control points. \
-        Based on Colorinator in PECOC by Tsjerk Wassenaar." \
-        -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
-    pack $pcm.desc -anchor w -pady "0 $pad"
-
-    set frc [frame $pcm.frc]
-    label $frc.l -text "Map" -width $::simmerblau::label_width -anchor w
-    set c_opts [list "SBW" "BWR" "PRGn" "Spectral" "Viridis" "BGW" "RYW" "PMG" "HWC" "Blues" "Reds" "VanGogh" "Peacock" "Heat" "BWO" "PeacockMagenta"]
-    eval [list tk_optionMenu $frc.m ::simmerblau::colorinator_map] $c_opts
-    pack $frc.l $frc.m -side left
-    pack $frc -fill x -pady $pad
-
     set pce [labelframe $frp.editor -text "Stop Color" -padx $framepad -pady $framepad]
     pack $pce -fill x -pady $pad
     label $pce.desc -text "Adjust RGB values of the selected stop." \
@@ -618,7 +603,8 @@ proc ::simmerblau::simmerblau_gui {} {
     set pms [labelframe $frp.stops -text "Custom Stops" -padx $framepad -pady $framepad]
     pack $pms -fill both -expand 1 -pady $pad
 
-    label $pms.desc -text "Fine-tune individual control points and colors." \
+    label $pms.desc -text "Flexible color mapping with adjustable control points. \
+        Based on Colorinator in PECOC by Tsjerk Wassenaar." \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $pms.desc -anchor w -pady "0 $pad"
 
@@ -633,7 +619,7 @@ proc ::simmerblau::simmerblau_gui {} {
 
     set fsn [frame $pms.snap]
     pack $fsn -fill x -pady $pad
-    label $fsn.desc -text "Snap positions to common distributions:" \
+    label $fsn.desc -text "Snap positions to common distributions or load a preset map:" \
         -font $font_explanation -fg $fg_subtle -wraplength $wraplength -justify left
     pack $fsn.desc -anchor w -pady "5 2"
 
@@ -641,6 +627,11 @@ proc ::simmerblau::simmerblau_gui {} {
     button $fsn.qua -text "Quartile" -command {::simmerblau::colorinator_snap_spacing "quartile"}
     button $fsn.box -text "Boxplot" -command {::simmerblau::colorinator_snap_spacing "boxplot"}
     pack $fsn.uni $fsn.qua $fsn.box -side left -padx 2
+
+    # Map preset menu aligned to the right.
+    set c_opts [list "SBW" "BWR" "PRGn" "Spectral" "Viridis" "BGW" "RYW" "PMG" "HWC" "Blues" "Reds" "VanGogh" "Peacock" "Heat" "BWO" "PeacockMagenta"]
+    eval [list tk_optionMenu $fsn.m ::simmerblau::colorinator_map] $c_opts
+    pack $fsn.m -side right -padx 2
 
     set pm [labelframe $frs.mode -text "Color space" -padx $framepad -pady $framepad]
     pack $pm -fill x -pady $pad
