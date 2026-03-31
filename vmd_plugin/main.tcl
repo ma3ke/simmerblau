@@ -1059,8 +1059,11 @@ proc ::simmerblau::apply_ramp {} {
         set i 0
         foreach rgb $ramp {
             if {$i >= $::simmerblau::PALETTE_SIZE} break
-            # Skip white (Color ID 8).
-            if {$i == 8} { incr i; continue }
+            # Skip the background color.
+            if {$i == [colorinfo index [color Display Background]]} {
+                incr i
+                continue
+            }
             # Respect locked colors.
             if {[dict exists $::simmerblau::lockedColors $i]} {
                 incr i
