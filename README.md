@@ -25,8 +25,8 @@ can run VMD anywhere and find _simmerblau_ under **Extensions > Visualization > 
 
 ## Usage
 
-With _simmerblau_, you can set both the Color scale and Color IDs 0–32 (excluding white, which is
-typically used as a sensible background color).
+With _simmerblau_, you can set both the Color scale and Color IDs 0–32
+(excluding the Color ID used for the background color).
 
 By ticking the _Live preview_ box, all changes to the palette are immediately applied to VMD's
 state.
