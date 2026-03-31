@@ -26,11 +26,13 @@ proc simmerblau_install {} {
     }
 
     # Prepare the installation lines.
-    set install_block "\n# Simmerblau plugin.\nlappend auto_path \"$plugin_dir\"\npackage require simmerblau"
+    set install_block "\n# Simmerblau plugin.\nlappend auto_path \"$plugin_dir\"; list\npackage require simmerblau; list"
+
+    set vmd_rc_exists [file exists $vmd_rc_file]
 
     # Check if the plugin is already registered in the config file.
     set already_installed 0
-    if {[file exists $vmd_rc_file]} {
+    if {$vmd_rc_exists} {
         set fp [open $vmd_rc_file r]
         set content [read $fp]
         close $fp
@@ -44,6 +46,11 @@ proc simmerblau_install {} {
     } else {
         # Append to the RC file.
         set fp [open $vmd_rc_file a]
+        if {!$vmd_rc_exists} {
+            # If there was no .vmdrc before, creating it would turn the main menu off, which is an
+            # undesirable side effect.
+            puts $fp "menu main on\n"
+        }
         puts $fp $install_block
         close $fp
         puts "Successfully added Simmerblau to $vmd_rc_file."
