@@ -39,6 +39,7 @@ namespace eval ::simmerblau:: {
     variable snapshotAfterID ""
     # This dictionary maps the color index to its {r g b} values.
     variable lockedColors {}
+    variable dragging_locked_idx -1
     variable selected_stop_idx 0
     variable cur_r 0.0
     variable cur_g 0.0
@@ -937,8 +938,9 @@ proc ::simmerblau::update_preview {args} {
             set is_locked 0
         }
 
+        set tags [list "color_rect" "color_$i"]
         set hex [format "#%02x%02x%02x" [expr {int([lindex $rgb 0]*255)}] [expr {int([lindex $rgb 1]*255)}] [expr {int([lindex $rgb 2]*255)}]]
-        $canvas create rectangle 0 $py $half [expr {$py + $p_step}] -fill $hex -outline "#ffffff"
+        $canvas create rectangle 0 $py $half [expr {$py + $p_step}] -fill $hex -outline "#ffffff" -tags $tags
 
         # Skip VMD background color index
         if {$vmd_i == [colorinfo index [color Display Background]]} {
@@ -997,9 +999,10 @@ proc ::simmerblau::update_preview {args} {
 proc ::simmerblau::on_mouse_down {x y} {
     variable w
     variable dragging_stop_idx
+    variable dragging_locked_idx
     set canvas $w.cv
 
-    # First, check if a stop marker was clicked.
+    # Check if a stop marker or color rect was clicked.
     set items [$canvas find overlapping [expr {$x-3}] [expr {$y-3}] [expr {$x+3}] [expr {$y+3}]]
     foreach item $items {
         set tags [$canvas gettags $item]
@@ -1012,63 +1015,130 @@ proc ::simmerblau::on_mouse_down {x y} {
                 }
             }
         }
+        if {[lsearch $tags "color_rect"] != -1} {
+            foreach tag $tags {
+                if {[scan $tag "color_%d" idx] == 1} {
+                    set dragging_locked_idx $idx
+                    return
+                }
+            }
+        }
     }
-
-    # If no marker was clicked, fall back to the locking logic for the palette.
-    ::simmerblau::on_canvas_click $x $y
 }
 
 proc ::simmerblau::on_mouse_move {x y} {
     variable dragging_stop_idx
-    if {$dragging_stop_idx < 0} return
-
+    variable dragging_locked_idx
     variable w
     set canvas $w.cv
-    set height [winfo height $canvas]
-    if {$height <= 1} { set height 700 }
 
-    # Calculate the normalized position.
-    set pos [expr {double($y) / $height}]
-    if {$pos < 0.0} { set pos 0.0 }
-    if {$pos > 1.0} { set pos 1.0 }
+    if {$dragging_stop_idx >= 0} {
+        set height [winfo height $canvas]
+        if {$height <= 1} { set height 700 }
 
-    # Update the stop position during the drag.
-    lset ::simmerblau::colorinator_stops $dragging_stop_idx 0 $pos
-    ::simmerblau::update_preview
+        # Calculate the normalized position.
+        set pos [expr {double($y) / $height}]
+        if {$pos < 0.0} { set pos 0.0 }
+        if {$pos > 1.0} { set pos 1.0 }
+
+        # Update the stop position during the drag.
+        lset ::simmerblau::colorinator_stops $dragging_stop_idx 0 $pos
+        ::simmerblau::update_preview
+    }
 }
 
 proc ::simmerblau::on_mouse_up {x y} {
     variable dragging_stop_idx
-    if {$dragging_stop_idx < 0} return
-
-    # Commit the final position and sort.
-    set idx $dragging_stop_idx
-    set dragging_stop_idx -1
-
+    variable dragging_locked_idx
+    variable lockedColors
     variable w
     set canvas $w.cv
-    set height [winfo height $canvas]
-    if {$height <= 1} { set height 700 }
-    set pos [expr {double($y) / $height}]
-    if {$pos < 0.0} { set pos 0.0 }
-    if {$pos > 1.0} { set pos 1.0 }
 
-    # Find the new index of the stop after sorting.
-    set old_rgb [lindex [lindex $::simmerblau::colorinator_stops $idx] 1]
-    lset ::simmerblau::colorinator_stops $idx 0 $pos
-    set ::simmerblau::colorinator_stops [lsort -real -index 0 $::simmerblau::colorinator_stops]
+    if {$dragging_stop_idx >= 0} {
+        # Dragging a stop.
 
-    set new_idx 0
-    foreach stop $::simmerblau::colorinator_stops {
-        if {abs([lindex $stop 0] - $pos) < 0.0001 && [lindex $stop 1] == $old_rgb} {
-            break
+        # Commit the final position and sort.
+        set idx $dragging_stop_idx
+        set dragging_stop_idx -1
+
+        set height [winfo height $canvas]
+        if {$height <= 1} { set height 700 }
+        set pos [expr {double($y) / $height}]
+        if {$pos < 0.0} { set pos 0.0 }
+        if {$pos > 1.0} { set pos 1.0 }
+
+        # Find the new index of the stop after sorting.
+        set old_rgb [lindex [lindex $::simmerblau::colorinator_stops $idx] 1]
+        lset ::simmerblau::colorinator_stops $idx 0 $pos
+        set ::simmerblau::colorinator_stops [lsort -real -index 0 $::simmerblau::colorinator_stops]
+
+        set new_idx 0
+        foreach stop $::simmerblau::colorinator_stops {
+            if {abs([lindex $stop 0] - $pos) < 0.0001 && [lindex $stop 1] == $old_rgb} {
+                break
+            }
+            incr new_idx
         }
-        incr new_idx
-    }
 
-    # A full refresh is triggered upon release to update the editor rows.
-    ::simmerblau::colorinator_select_stop $new_idx 1
-    ::simmerblau::update_preview
+        # A full refresh is triggered upon release to update the editor rows.
+        ::simmerblau::colorinator_select_stop $new_idx 1
+        ::simmerblau::update_preview
+    } elseif {$dragging_locked_idx >= 0} {
+        # Dragging a locked item.
+
+        # Drag from.
+        set idx_from $dragging_locked_idx
+        set dragging_locked_idx -1
+        # Drop to.
+        set idx_to -1
+        set items [$canvas find overlapping [expr {$x-3}] [expr {$y-3}] [expr {$x+3}] [expr {$y+3}]]
+        foreach item $items {
+            set tags [$canvas gettags $item]
+            if {[lsearch $tags "color_rect"] != -1} {
+                foreach tag $tags {
+                    if {[scan $tag "color_%d" idx] == 1} {
+                        set idx_to $idx
+                        break
+                    }
+                }
+            }
+
+            # Short circuit if within same rect.
+            if {$idx_to == $idx_from} {
+                ::simmerblau::on_canvas_click $x $y
+                return
+            }
+
+            if {$idx_to >= 0} {
+                # We have both a from and to.
+                if {![dict exists $lockedColors $idx_from]} {
+                    # UX choice: only be able to drag locked colors.
+                    return
+                }
+
+                set rgb_from [dict get $lockedColors $idx_from]
+
+                if {[dict exists $lockedColors $idx_to]} {
+                    # If target is locked too, swap it back.
+                    dict set lockedColors $idx_from [dict get $lockedColors $idx_to]
+                } else {
+                    # Otherwise, unlock it.
+                    dict unset lockedColors $idx_from
+                }
+
+                # Move source to target.
+                dict set lockedColors $idx_to $rgb_from
+
+                ::simmerblau::push_undo_snapshot
+                ::simmerblau::update_preview
+                return
+            }
+        }
+
+    } else {
+        # If no meaningful dragging is happening, fall back to click logic.
+        ::simmerblau::on_canvas_click $x $y
+    }
 }
 
 proc ::simmerblau::apply_ramp {} {
