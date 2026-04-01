@@ -19,7 +19,7 @@ namespace eval ::simmerblau::logic::rampensau {
                 return [list [expr {sin($limit + $t * $limit - $accent)}] [expr {cos(-$limit + $t * $limit + $accent)}]]
             }
             "power" {
-                return [list [expr {pow($t, $accent)}] [expr {pow($t, $accent)}]]
+                return [list [expr {pow(1.0 - $t, 1.0 - $accent)}] [expr {pow($t, 1.0 - $accent)}]]
             }
             "powY" {
                 return [list [expr {pow(1.0 - $t, $accent)}] [expr {pow($t, 1.0 - $accent)}]]
