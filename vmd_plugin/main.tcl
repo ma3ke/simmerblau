@@ -56,7 +56,7 @@ proc simmerblau_tk_cb {} {
 
 proc ::simmerblau::get_current_state {} {
     set state {}
-    foreach var {technique colorinator_map colorinator_stops hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent useHarvey colorSpace harmony} {
+    foreach var {technique colorinator_map colorinator_stops hStart hCycles hStartCenter sMin sMax lMin lMax curveMethod curveAccent useHarvey colorSpace harmony lockedColors} {
         dict set state $var [set ::simmerblau::$var]
     }
     return $state
@@ -871,6 +871,7 @@ proc ::simmerblau::on_canvas_click {x y} {
 
     if {[dict exists $lockedColors $idx]} {
         dict unset lockedColors $idx
+        ::simmerblau::push_undo_snapshot
     } else {
         # Lock current projected color.
         set ramp [::simmerblau::generate_ramp $::simmerblau::PALETTE_SIZE]
@@ -882,7 +883,8 @@ proc ::simmerblau::on_canvas_click {x y} {
 
         set rgb [lindex $ramp $color_idx]
         dict set lockedColors $idx $rgb
-        }
+        ::simmerblau::push_undo_snapshot
+    }
 
     ::simmerblau::update_preview
     if {$::simmerblau::livePreview} { ::simmerblau::apply_ramp }
