@@ -1160,7 +1160,7 @@ proc ::simmerblau::apply_ramp {} {
             set rgb [lindex $ramp $ramp_i]
             # Respect locked colors.
             if {[dict exists $::simmerblau::lockedColors $ramp_i]} {
-                set [dict get $::simmerblau::lockedColors $ramp_i] rgb
+                set rgb [dict get $::simmerblau::lockedColors $ramp_i]
             }
             lassign $rgb r g b
             color change rgb $vmd_i $r $g $b
