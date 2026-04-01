@@ -1066,8 +1066,7 @@ proc ::simmerblau::apply_ramp {} {
             }
             # Respect locked colors.
             if {[dict exists $::simmerblau::lockedColors $i]} {
-                incr i
-                continue
+                set rgb [dict get $::simmerblau::lockedColors $i]
             }
             lassign $rgb r g b
             color change rgb $i $r $g $b
