@@ -15,7 +15,8 @@ namespace eval ::simmerblau:: {
     variable w
     variable technique "rampensau"
     # PALETTE_SIZE is the number of colors in VMD's standard palette (0-32).
-    set PALETTE_SIZE 33
+    # Excluding the background color.
+    set PALETTE_SIZE 32
     variable colorinator_map "SBW"
     variable colorinator_stops {{0.00 {0.15 0.55 0.90}} {0.50 {1.00 1.00 1.00}} {1.00 {0.85 0.40 0.05}}}
     variable hStart 180.0
@@ -45,6 +46,7 @@ namespace eval ::simmerblau:: {
     variable dragging_stop_idx -1
     set plugin_title "Simmerblau Colors"
     set label_width 14
+    set font "Helvetica"
 }
 
 proc simmerblau_tk_cb {} {
@@ -578,7 +580,6 @@ proc ::simmerblau::colorinator_snap_spacing {type} {
 }
 
 proc ::simmerblau::simmerblau_gui {} {
-    set font "Helvetica"
     set font_explanation "Times 10 italic"
     set fg_subtle gray50
     set pad 3
@@ -586,6 +587,7 @@ proc ::simmerblau::simmerblau_gui {} {
     set wraplength 400
 
     variable w
+    variable font
 
     if {[winfo exists .simmerblau]} {
         wm deiconify .simmerblau
@@ -862,7 +864,7 @@ proc ::simmerblau::on_canvas_click {x y} {
     if {$x > ($width / 2.0)} return
 
     set height [winfo height $canvas]
-    # We always show 33 slots for the palette side.
+    # We always show PALETTE_SIZE slots for the palette side.
     set num_boxes $::simmerblau::PALETTE_SIZE
     set step [expr {double($height) / $num_boxes}]
     set idx [expr {int(floor($y / $step))}]
@@ -888,6 +890,8 @@ proc ::simmerblau::on_canvas_click {x y} {
 
 proc ::simmerblau::update_preview {args} {
     variable w; if {![winfo exists $w]} return
+    variable font
+    variable targetRange
     set canvas $w.cv
     $canvas delete all
 
@@ -915,6 +919,7 @@ proc ::simmerblau::update_preview {args} {
     set p_ramp [::simmerblau::generate_ramp $num_palette]
 
     set p_step [expr {double($height) / $num_palette}]
+    set vmd_i 0
     for {set i 0} {$i < $num_palette} {incr i} {
         set py [expr {$i * $p_step}]
 
@@ -933,17 +938,29 @@ proc ::simmerblau::update_preview {args} {
         set hex [format "#%02x%02x%02x" [expr {int([lindex $rgb 0]*255)}] [expr {int([lindex $rgb 1]*255)}] [expr {int([lindex $rgb 2]*255)}]]
         $canvas create rectangle 0 $py $half [expr {$py + $p_step}] -fill $hex -outline "#ffffff"
 
-        # Visual indicator for locking.
-        if {$is_locked} {
-            set cx [expr {$half / 2.0}]
-            set cy [expr {$py + $p_step / 2.0}]
-            set r 3
-            # Contrast dot.
-            set dot_fill "white"
-            set lum [expr {0.2126*[lindex $rgb 0] + 0.7152*[lindex $rgb 1] + 0.0722*[lindex $rgb 2]}]
-            if {$lum > 0.5} { set dot_fill "black" }
-            $canvas create oval [expr {$cx-$r}] [expr {$cy-$r}] [expr {$cx+$r}] [expr {$cy+$r}] -fill $dot_fill -outline ""
+        # Skip VMD background color index
+        if {$vmd_i == [colorinfo index [color Display Background]]} {
+            incr vmd_i
         }
+
+        # Visual indicator for locking and color IDs.
+        set cx [expr {$half / 2.0}]
+        set cy [expr {$py + $p_step / 2.0}]
+        # Indicate locked status.
+        set label_text "$vmd_i"
+        if {$is_locked} {
+            set label_text "🔒 $vmd_i"
+        }
+        # Contrast the color ID label.
+        set fill "white"
+        set lum [expr {0.2126*[lindex $rgb 0] + 0.7152*[lindex $rgb 1] + 0.0722*[lindex $rgb 2]}]
+        if {$lum > 0.5} { set fill "black" }
+        # If the target is not 0-32, make the numbers greyed out.
+        if {$targetRange != "0-32"} {
+            set fill "gray70"
+        }
+        $canvas create text [expr {$cx}] [expr {$cy}] -font $font -fill $fill -text $label_text
+        incr vmd_i
     }
 
     # Draw Colorinator stop markers if active.
@@ -1056,21 +1073,26 @@ proc ::simmerblau::apply_ramp {} {
     variable targetRange
     if {$targetRange == "0-32"} {
         set ramp [::simmerblau::generate_ramp $::simmerblau::PALETTE_SIZE]
-        set i 0
-        foreach rgb $ramp {
-            if {$i >= $::simmerblau::PALETTE_SIZE} break
-            # Skip the background color.
-            if {$i == [colorinfo index [color Display Background]]} {
-                incr i
-                continue
+        # Which VMD color to write to.
+        set vmd_i 0
+        # Iterate through ramp colors.
+        for { set ramp_i 0 } { $ramp_i < $::simmerblau::PALETTE_SIZE } { incr ramp_i } {
+            # Don't write above the 0-32 range by accident.
+            if {$vmd_i > 32} {
+                error "Assertion failed: vmd_index out of bounds."
             }
+            # Skip the background color.
+            if {$vmd_i == [colorinfo index [color Display Background]]} {
+                incr vmd_i
+            }
+            set rgb [lindex $ramp $ramp_i]
             # Respect locked colors.
-            if {[dict exists $::simmerblau::lockedColors $i]} {
-                set rgb [dict get $::simmerblau::lockedColors $i]
+            if {[dict exists $::simmerblau::lockedColors $ramp_i]} {
+                set [dict get $::simmerblau::lockedColors $ramp_i] rgb
             }
             lassign $rgb r g b
-            color change rgb $i $r $g $b
-            incr i
+            color change rgb $vmd_i $r $g $b
+            incr vmd_i
         }
     } else {
         # Update VMD color scale.
