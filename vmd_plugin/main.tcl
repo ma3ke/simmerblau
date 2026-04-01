@@ -743,7 +743,7 @@ proc ::simmerblau::simmerblau_gui {} {
     radiobutton $frc.r6 -text "Linear" -value "linear" -variable ::simmerblau::curveMethod
     pack $frc.r1 $frc.r2 $frc.r3 $frc.r4 $frc.r5 $frc.r6 -side left -expand 1
     pack $frc -fill x
-    ::simmerblau::create_control $pc "Flow intensity" curveAccent 0 5
+    ::simmerblau::create_control $pc "Flow intensity" curveAccent 0 1
     foreach child [winfo children $pc] { if {$child != "$frc" && $child != "$pc.desc"} { pack $child -fill x -expand 1 } }
 
     set pl [labelframe $f.lib -text "Palette library" -padx $framepad -pady 3]
