@@ -9,24 +9,71 @@
 # This script will automatically update your .vmdrc or vmd.rc file.
 
 proc simmerblau_install {} {
-    set plugin_dir [file normalize [file join [file dirname [info script]] "vmd_plugin"]]
+    set src_dir [file normalize [file join [file dirname [info script]] "vmd_plugin"]]
     set vmd_rc_file ""
 
-    # Detect the correct VMD configuration file based on the OS.
+    # Detect the correct VMD configuration file and data dir based on the OS.
     if {$::tcl_platform(platform) == "windows"} {
         set vmd_rc_file [file join $::env(VMDDIR) "vmd.rc"]
+        set vmd_plugins_dir [file join $::env(APPDATA) vmd plugins]
+        set platform "Windows"
+    } elseif {$::tcl_platform(os) == "Darwin"} {
+        set vmd_rc_file [file join $::env(HOME) ".vmdrc"]
+        set vmd_plugins_dir [file join $::env(HOME) Library "Application Support" vmd plugins]
+        set platform "Mac OS"
     } else {
         set vmd_rc_file [file join $::env(HOME) ".vmdrc"]
+        if {[info exists ::env(XDG_DATA_HOME)] && $::env(XDG_DATA_HOME) ne ""} {
+            set vmd_plugins_dir [file join $::env(XDG_DATA_HOME) vmd plugins]
+        } else {
+            set vmd_plugins_dir [file join $::env(HOME) .local share vmd plugins]
+        }
+        set platform "Unix"
     }
+    set target_dir [file join $vmd_plugins_dir simmerblau]
 
+    # 0. Inform the user, since they can spot platform mis-detections.
+    puts "Platform: $platform"
+    puts "VMDRC: $vmd_rc_file"
+    puts "Target directory: $target_dir"
+
+    # 1. Sanity checks.
     # Ensure the plugin directory exists.
-    if {![file isdirectory $plugin_dir]} {
-        puts "Error: Plugin directory not found at $plugin_dir"
+    if {![file isdirectory $src_dir]} {
+        puts "Error: Plugin directory not found at $src_dir"
         return
     }
+    # Remove a previous installation, if already there.
+    if {[file isdirectory $target_dir]} {
+        puts "Cleaning previous installation inside $target_dir"
+        # Only delete .tcl files (since the plugin has only .tcl files).
+        file delete -- {*}[glob -nocomplain -directory $target_dir -types f *.tcl]
+    } else {
+        # Make the plugin directory.
+        file mkdir $target_dir
+    }
 
+    # 2. Copy files to data dir.
+    set files [glob -nocomplain -directory $src_dir -types f *.tcl]
+    if {[llength $files] > 0} {
+        file copy -force -- {*}$files $target_dir
+    }
+
+    # 3. Make sure auto_path is set in VMDRC, and that the package is required by default.
     # Prepare the installation lines.
-    set install_block "\n# Simmerblau plugin.\nlappend auto_path \"$plugin_dir\"; list\npackage require simmerblau; list"
+    set install_block {
+# VMD plugin path (added by Simmerblau).
+set _plugindir {@PLUGIN_DIR@}; list
+if {[lsearch -exact $auto_path $_plugindir] < 0} {
+    lappend auto_path $_plugindir; list
+}
+# Simmerblau plugin.
+package require simmerblau; list
+    }
+    # Escaped with [list $vmd_plugins_dir]
+    set install_block [
+        string trim [string map [list @PLUGIN_DIR@ [list $vmd_plugins_dir]] $install_block]
+    ]
 
     set vmd_rc_exists [file exists $vmd_rc_file]
 
@@ -54,16 +101,16 @@ proc simmerblau_install {} {
         puts $fp $install_block
         close $fp
         puts "Successfully added Simmerblau to $vmd_rc_file."
-    }
 
-    # Load the plugin for the current session immediately.
-    lappend ::auto_path $plugin_dir
-    if {[catch {package require simmerblau} msg]} {
-        puts "Warning: Could not load the package immediately: $msg"
-    } else {
-        vmd_install_extension simmerblau simmerblau_tk_cb "Visualization/Simmerblau Colors"
-        puts "Simmerblau has been loaded and registered for this session."
-        puts "You can find it under Extensions > Visualization > Simmerblau Colors."
+        # 4. Load the plugin for the current session immediately, if not already installed.
+        lappend ::auto_path $target_dir
+        if {[catch {package require simmerblau} msg]} {
+            puts "Warning: Could not load the package immediately: $msg"
+        } else {
+            vmd_install_extension simmerblau simmerblau_tk_cb "Visualization/Simmerblau Colors"
+            puts "Simmerblau has been loaded and registered for this session."
+            puts "You can find it under Extensions > Visualization > Simmerblau Colors."
+        }
     }
 }
 
