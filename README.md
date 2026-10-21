@@ -23,6 +23,12 @@ The installer registers the plugin at the bottom of your `.vmdrc` or `vmd.rc` on
 actually do that???) and will load it immediately into the current session. After installation, you
 can run VMD anywhere and find _simmerblau_ under **Extensions > Visualization > Simmerblau Colors**.
 
+The plugin will be installed in the appropriate application data directory for your platform.
+
+- `~/.local/share/vmd/plugins/simmerblau` on Linux platforms.
+- `~/Library/Application Support/vmd/plugins/simmerblau` on macOS.
+- `%AppData%\vmd\plugins\simmerblau` on Windows.
+
 ## Usage
 
 With _simmerblau_, you can set both the Color scale and Color IDs 0–32
