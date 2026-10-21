@@ -16,11 +16,9 @@ proc simmerblau_install {} {
     if {$::tcl_platform(platform) == "windows"} {
         set vmd_rc_file [file join $::env(VMDDIR) "vmd.rc"]
         set vmd_plugins_dir [file join $::env(APPDATA) vmd plugins]
-        set platform "Windows"
     } elseif {$::tcl_platform(os) == "Darwin"} {
         set vmd_rc_file [file join $::env(HOME) ".vmdrc"]
         set vmd_plugins_dir [file join $::env(HOME) Library "Application Support" vmd plugins]
-        set platform "Mac OS"
     } else {
         set vmd_rc_file [file join $::env(HOME) ".vmdrc"]
         if {[info exists ::env(XDG_DATA_HOME)] && $::env(XDG_DATA_HOME) ne ""} {
@@ -28,22 +26,18 @@ proc simmerblau_install {} {
         } else {
             set vmd_plugins_dir [file join $::env(HOME) .local share vmd plugins]
         }
-        set platform "Unix"
     }
     set target_dir [file join $vmd_plugins_dir simmerblau]
 
-    # 0. Inform the user, since they can spot platform mis-detections.
-    puts "Platform: $platform"
     puts "VMDRC: $vmd_rc_file"
     puts "Target directory: $target_dir"
 
-    # 1. Sanity checks.
     # Ensure the plugin directory exists.
     if {![file isdirectory $src_dir]} {
         puts "Error: Plugin directory not found at $src_dir"
         return
     }
-    # Remove a previous installation, if already there.
+    # Remove a previous installation, if it already exists there.
     if {[file isdirectory $target_dir]} {
         puts "Cleaning previous installation inside $target_dir"
         # Only delete .tcl files (since the plugin has only .tcl files).
@@ -53,24 +47,23 @@ proc simmerblau_install {} {
         file mkdir $target_dir
     }
 
-    # 2. Copy files to data dir.
+    # Copy the plugin files to the data directory.
     set files [glob -nocomplain -directory $src_dir -types f *.tcl]
     if {[llength $files] > 0} {
         file copy -force -- {*}$files $target_dir
     }
 
-    # 3. Make sure auto_path is set in VMDRC, and that the package is required by default.
     # Prepare the installation lines.
     set install_block {
-# VMD plugin path (added by Simmerblau).
-set _plugindir @PLUGIN_DIR@; list
-if {[lsearch -exact $auto_path $_plugindir] < 0} {
-    lappend auto_path $_plugindir; list
-}
-# Simmerblau plugin.
-package require simmerblau; list
+        # VMD plugin path (added by Simmerblau).
+        set _plugindir @PLUGIN_DIR@; list
+        if {[lsearch -exact $auto_path $_plugindir] < 0} {
+            lappend auto_path $_plugindir; list
+        }
+        # Simmerblau plugin.
+        package require simmerblau; list
     }
-    # Escaped with [list $vmd_plugins_dir]
+    # We escape the plugins directory using `[list $vmd_plugins_dir]`.
     set install_block [
         string trim [string map [list @PLUGIN_DIR@ [list $vmd_plugins_dir]] $install_block]
     ]
