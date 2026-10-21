@@ -63,7 +63,7 @@ proc simmerblau_install {} {
     # Prepare the installation lines.
     set install_block {
 # VMD plugin path (added by Simmerblau).
-set _plugindir {@PLUGIN_DIR@}; list
+set _plugindir @PLUGIN_DIR@; list
 if {[lsearch -exact $auto_path $_plugindir] < 0} {
     lappend auto_path $_plugindir; list
 }
